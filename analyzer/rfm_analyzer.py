@@ -37,6 +37,75 @@ class RFMAnalyzer(BaseDataHandler):
         self.rfm=rfm[["Recency","Frequency","Monetary"]]
         return self.rfm
         
+    def score_rfm(self):
+        """根据均值给 R/F/M 打分（1=高/好，0=低/差）
+
+        R 越小越好：Recency 低于均值记 1
+        F、M 越大越好：高于均值记 1
+
+        返回值:
+            pandas.DataFrame: 在 self.rfm 上新增 R_score/F_score/M_score 三列
+        """
+
+        if self.rfm is None:
+            raise ValueError("请先调用 calc_rfm() 生成 RFM 表")
+        
+        r_mean = self.rfm["Recency"].mean()
+        f_mean = self.rfm["Frequency"].mean()
+        m_mean = self.rfm["Monetary"].mean()
+
+        self.rfm["R_score"]=(self.rfm["Recency"]<r_mean).astype(int)
+        self.rfm["F_score"] = (self.rfm["Frequency"] > f_mean).astype(int)
+        self.rfm["M_score"] = (self.rfm["Monetary"] > m_mean).astype(int)
+
+        return self.rfm
+    
+    def label_customer(self):
+        """根据 R/F/M 三维打分组合，给每个客户贴 8 类标签
+
+        把 R_score/F_score/M_score 拼成 "RFM" 三位 key（如 "111"），
+        查 label_map 字典得到对应客户类型。
+
+        返回值:
+            pandas.DataFrame: 在 self.rfm 上新增 Label 列
+        """
+        if self.rfm is None or "R_score" not in self.rfm.columns:
+            raise ValueError("请先调用 calc_rfm() 和 score_rfm()")
+
+        label_map = {
+            "111": "重要价值客户",
+            "011": "重要保持客户",
+            "101": "重要发展客户",
+            "001": "重要挽留客户",
+            "110": "一般价值客户",
+            "010": "一般保持客户",
+            "100": "一般发展客户",
+            "000": "一般挽留客户",
+        }
+
+        key=(self.rfm["R_score"].astype(str)
+            +self.rfm["F_score"].astype(str)
+            +self.rfm["M_score"].astype(str))
+        self.rfm["Label"]=key.map(label_map)
+        return self.rfm
+
+    def analyze_all(self):
+        """按标准顺序执行完整 RFM 分析流程
+
+        执行顺序:
+            1. calc_rfm()       —— 计算 R/F/M 三个原始值
+            2. score_rfm()      —— 按均值打 高/低 分(1/0)
+            3. label_customer() —— 生成 8 类客户标签
+
+        返回值:
+            pandas.DataFrame: 完成全部分析的客户 RFM 表
+        """
+        self.calc_rfm()
+        self.score_rfm()
+        self.label_customer()
+        self.log.append("=== RFM 分析全部完成 ===")
+        return self.rfm
+
        
 
     
