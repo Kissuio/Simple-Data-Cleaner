@@ -11,6 +11,10 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# ===== output =====
+output/
+
+
 # ===== Claude Code 个人配置 =====
 .claude/settings.local.json
 
