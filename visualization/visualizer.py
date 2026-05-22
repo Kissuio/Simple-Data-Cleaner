@@ -66,6 +66,28 @@ class Visualizer:
         plt.savefig(path, bbox_inches="tight")
         plt.close()
         return path
+    
+    def plot_monthly_trend(self, monthly):
+        """月销售额折线图,  
+        x=月份, y=销售总额,  
+        返回 PNG 路径
+        """
+
+        monthly=monthly.iloc[:-1]
+        plt.figure(figsize=(10,6))
+        plt.plot(monthly.index,monthly,marker="o")
+        plt.title("月度销售趋势")
+        plt.xlabel("月份")
+        plt.ylabel("销售总额")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        path = f"{self.output_dir}/monthly_trend.png"
+        plt.savefig(path)
+        plt.close()
+        return path
+
+
+
 
 
 

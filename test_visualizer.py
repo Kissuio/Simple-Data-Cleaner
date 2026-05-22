@@ -7,6 +7,7 @@ sys.stdout.reconfigure(encoding='utf-8')   # 解决 PowerShell 中文乱码
 from data_handlers.file_loader import FileLoader
 from data_handlers.data_cleaner import DataCleaner
 from analyzer.rfm_analyzer import RFMAnalyzer
+from analyzer.sales_trend import get_monthly_sales
 from visualization.visualizer import Visualizer
 
 
@@ -40,4 +41,8 @@ print(f"    柱状图已保存: {bar_path}")
 scatter_path = viz.plot_rfm_scatter(rfm)
 print(f"    气泡图已保存: {scatter_path}")
 
-print("\n完成。打开 output/ 目录查看三张 PNG。")
+monthly = get_monthly_sales(cleaner.df)
+trend_path = viz.plot_monthly_trend(monthly)
+print(f"    月度趋势图已保存: {trend_path}")
+
+print("\n完成。打开 output/ 目录查看四张 PNG。")

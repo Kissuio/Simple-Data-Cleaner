@@ -28,7 +28,12 @@ class DataCleaner(BaseDataHandler):
     
 
     def drop_cancellations(self):
-        """删除取消订单(InvoiceNo 以 'C' 开头的行)
+        """删除取消订单，以及它们残留的"原始正单"
+
+        取消订单 = InvoiceNo 以 'C' 开头的行。每条取消单都对应一条
+        原始正单（同客户、同商品编码、同单价，数量正负相反）。本方法
+        除了删取消单本身，还用"指纹配对"找出并删除这些原始正单，
+        避免它们残留、虚增销量与金额。
 
         返回值:
            pandas.DataFrame: 清洗后的 df
@@ -39,7 +44,17 @@ class DataCleaner(BaseDataHandler):
         
         before=len(self.df)
         is_cancellation=self.df["InvoiceNo"].astype(str).str.startswith("C")
-        self.df=self.df[~is_cancellation]
+        cancellations = self.df[is_cancellation]
+        cancel_keys = set(zip(cancellations["CustomerID"],
+                              cancellations["StockCode"],
+                              cancellations["UnitPrice"],
+                              -cancellations["Quantity"]))
+        row_keys = zip(self.df["CustomerID"],
+                       self.df["StockCode"],
+                       self.df["UnitPrice"],
+                       self.df["Quantity"])
+        is_cancelled_original=pd.Series([k in cancel_keys for k in row_keys],index=self.df.index)
+        self.df=self.df[~is_cancellation& ~is_cancelled_original]
         after=len(self.df)
         self.report_change(before,after)
         return self.df
