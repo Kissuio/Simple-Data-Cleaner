@@ -205,8 +205,7 @@ class OverviewPage(ttk.Frame):
         messagebox.showinfo("导出成功", f"图已保存到：\n{dst}")
 
     def _on_ai(self):
-        """V1 占位：弹消息提示，V2 改成跳转到 AI 解读页。"""
-        messagebox.showinfo(
-            "AI 解读（V2 功能）",
-            "AI 解读功能将在 V2 实现。\n届时点击此按钮会跳转到 AI 解读页面。",
-        )
+        """弹出 AI 解读独立窗口。"""
+        # 延迟 import 避免 openai 库未装时整个 GUI 起不来
+        from gui.ai_dialog import AIDialog
+        AIDialog(self, self.app)
