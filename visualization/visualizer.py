@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 class Visualizer:
     def __init__(self, output_dir="output"):
         """
@@ -85,6 +86,76 @@ class Visualizer:
         plt.savefig(path)
         plt.close()
         return path
+
+    def plot_top_quantity(self, top_quantity):
+        """TOP10 销量横向柱状图,
+        参数 top_quantity 为 get_top_quantity(df) 返回的 Series（商品名→销量，降序）,
+        返回 PNG 路径
+        """
+
+        # 反转：原 Series 是降序，barh 默认从下往上画，反转后最大值落在顶端
+        top_quantity = top_quantity.iloc[::-1]
+        plt.figure(figsize=(10,7))
+        bars = plt.barh(top_quantity.index, top_quantity)
+        plt.bar_label(bars, padding=3)
+        plt.title("TOP10 热销商品（按销量）")
+        plt.xlabel("销量")
+        path = f"{self.output_dir}/top_quantity.png"
+        plt.savefig(path, bbox_inches="tight")
+        plt.close()
+        return path
+    
+    def plot_price_distribution(self, prices):
+        """成交单价分布直方图（x 轴对数刻度），
+        参数 prices 为 get_price_distribution(df) 返回的单价 Series,
+        返回 PNG 路径
+        """
+        prices = prices[prices > 0]
+        bins = np.logspace(np.log10(prices.min()), np.log10(prices.max()), 50)
+        plt.figure(figsize=(10, 6))
+        plt.hist(prices, bins=bins)
+        plt.xscale("log")
+        plt.title("成交单价分布（对数刻度）")
+        plt.xlabel("单价（英镑，对数刻度）")
+        plt.ylabel("成交笔数")
+        path = f"{self.output_dir}/price_distribution.png"
+        plt.savefig(path, bbox_inches="tight")
+        plt.close()
+        return path
+
+    def plot_weekday_hour_heatmap(self, pivot):
+        """订单数热力图（星期 × 小时），
+        参数 pivot 为 get_weekday_hour_orders(df) 返回的 7×24 DataFrame,
+        返回 PNG 路径
+        """
+        weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        plt.figure(figsize=(14, 5))
+        sns.heatmap(pivot, cmap="YlOrRd", annot=True, fmt=".0f", yticklabels=weekday_names)
+        plt.title("订单数热力图（星期 × 小时）")
+        plt.xlabel("小时")
+        plt.ylabel("星期")
+        path = f"{self.output_dir}/weekday_hour_heatmap.png"
+        plt.savefig(path, bbox_inches="tight")
+        plt.close()
+        return path
+
+    def plot_top_revenue(self,top_revenue):
+        """TOP10 销售额横向柱状图,
+        参数 top_revenue 为 get_top_revenue(df) 返回的 Series（商品名→销售额，降序）,
+        返回 PNG 路径
+        """
+        top_revenue=top_revenue.iloc[::-1]
+        plt.figure(figsize=(10,7))
+        bars=plt.barh(top_revenue.index,top_revenue)
+        plt.bar_label(bars,padding=3)
+        plt.title("TOP10 热销商品（按销售额）")
+        plt.xlabel("销售额")
+        path = f"{self.output_dir}/top_revenue.png"
+        plt.savefig(path, bbox_inches="tight")
+        plt.close()
+        return path
+
+
 
 
 
