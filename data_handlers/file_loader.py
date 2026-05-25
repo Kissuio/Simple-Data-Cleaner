@@ -13,10 +13,15 @@ class FileLoader(BaseDataHandler):
           'UnitPrice',
           'CustomerID']
         self.optional_columns=['Country']
-
+        self.column_aliases = {
+          "InvoiceNo":  ["Invoice"],
+          "UnitPrice":  ["Price"],
+          "CustomerID": ["Customer ID"],
+        }
 
     def load_file(self):
-        """读取文件，把数据存到 self.df 中，同时记录日志""" 
+        """读取文件并归一化列名，存到 self.df 中，同时记录日志  
+           详细列名归一化规则见 _normalize_columns 方法""" 
 
         if self.file_path.endswith(".xlsx"):
             self.df=pd.read_excel(self.file_path)
@@ -28,8 +33,35 @@ class FileLoader(BaseDataHandler):
             self.log.append(msg)
         else:
             raise ValueError("不支持的文件格式，请上传 .xlsx 或 .csv")
+        self._normalize_columns()
         return self.df
+    
+    def _normalize_columns(self):
+        """对于名称缺失部分或字符串中间含空格的列标题,  
+        保证一定程度上的名称兼容，  
+        避免大小写及首尾空格的影响
+        """
 
+        alias_to_std={}
+        
+        for k,v in self.column_aliases.items():
+            for alias in v:
+                alias_to_std[alias.strip().lower()]=k
+        
+        rename_map={}
+        
+        for actual_col in self.df.columns:
+            key=actual_col.strip().lower()
+            if key in alias_to_std:
+                std_col=alias_to_std[key]
+                if actual_col!=std_col:#避免自身的加入导致日志显示加入自身
+                    rename_map[actual_col]=std_col
+
+        if rename_map:
+            self.df.rename(columns=rename_map,inplace=True)
+            self.log.append(f"列名归一化:{rename_map}")
+                
+            
 
     def check_columns(self):
         """检查 self.df 是否包含所需字段
@@ -53,7 +85,10 @@ class FileLoader(BaseDataHandler):
 
         # 必需字段缺了直接中断，调用方必须处理
         if missing_required:
-            msg = f"缺少必需字段:{missing_required}"
+            attempted_aliases={}
+            for col in missing_required:
+                attempted_aliases[col]=self.column_aliases.get(col,[])
+            msg = f"缺少必需字段(字段名→已尝试别名):{attempted_aliases}"
             self.log.append(msg)
             raise ValueError(msg)
 

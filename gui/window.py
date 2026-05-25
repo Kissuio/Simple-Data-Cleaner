@@ -232,7 +232,7 @@ class App(tk.Tk):
 
 
 def run():
-    """GUI 入口函数。被 run_gui.py 调用。"""
+    """GUI 入口函数。被 main.py 调用。"""
     app = App()
     app.mainloop()
 

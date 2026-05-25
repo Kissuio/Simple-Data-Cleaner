@@ -35,6 +35,17 @@ CHARTS = [
     ("周热力图", "weekday_hour_heatmap.png"),
 ]
 
+# 缩略图 box 配置：PIL.Image.thumbnail 是"等比缩放到能装入 box 的最大尺寸"
+# 所以同一个 box (130,80) 下，不同宽高比的图实际像素尺寸差很多：
+#   - 横向图（10:6 ~ 14:5）：宽 130 卡死，高 ~46-78
+#   - 方形/接近方形图（1:1, 1.25:1）：高 80 卡死，宽只有 80-100 → 视觉上小一截
+# 解决：给方形图单独配方形 box，让宽高都能用满
+DEFAULT_THUMB_BOX = (130, 80)
+THUMB_BOX_OVERRIDES = {
+    "label_pie.png": (110, 110),        # 饼图 figsize=(8,8)，1:1
+    "label_avg_spend.png": (110, 110),  # 柱图 figsize=(10,8)，1.25:1，按方形 box 视觉更接近其他图
+}
+
 
 class OverviewPage(ttk.Frame):
     """图表总览标签页。"""
@@ -145,13 +156,19 @@ class OverviewPage(ttk.Frame):
         self.app.set_status("8 张图全部生成完成（output/ 目录）")
 
     def _refresh_thumbs(self):
-        """把 8 张 PNG 加载成缩略图，配到对应按钮。"""
+        """把 8 张 PNG 加载成缩略图，配到对应按钮。
+
+        按图查 THUMB_BOX_OVERRIDES：方形/接近方形的图用方形 box（宽高都用满），
+        其他横向图用默认横向 box——避免等比缩放下方形图视觉偏小。
+        """
         self.thumb_photos = []  # 清空旧引用
         for i, (name, fname) in enumerate(CHARTS):
             path = f"output/{fname}"
             try:
                 img = Image.open(path)
-                img.thumbnail((130, 80))
+                # 按文件名查覆盖配置；未覆盖的图用默认横向 box
+                box = THUMB_BOX_OVERRIDES.get(fname, DEFAULT_THUMB_BOX)
+                img.thumbnail(box)
                 photo = ImageTk.PhotoImage(img)
             except Exception:
                 continue
