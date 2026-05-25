@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python.exe -m pip install -i https://pypi.org/simple/ flask)",
+      "WebFetch(domain:career.hypergryph.com)",
+      "WebSearch"
+    ]
+  }
+}

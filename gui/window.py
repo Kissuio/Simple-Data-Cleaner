@@ -27,19 +27,33 @@ class App(tk.Tk):
     # 如果要换颜色，先在 _build_ui 里取消 style.theme_use("clam") 的注释，
     # 然后在下面 NAV_BUTTON_BG / NAV_BUTTON_FG 等填颜色值并启用。
     THEME = {
-        # 顶部导航按钮（6 个标签按钮）
-        "nav_button_font": ("SimHei", 14, "bold"),
-        "nav_button_padding": (15, 20),
-        # 颜色配置（需要先切换到 clam 主题才生效，目前是占位）
-        "nav_button_bg": None,       # 例: "#2c3e50"  导航按钮背景
-        "nav_button_fg": None,       # 例: "#ffffff"  导航按钮文字
-        "nav_button_active_bg": None,  # 例: "#34495e"  鼠标悬停/按下时
-        "nav_button_active_fg": None,  # 例: "#ffffff"
-        # 各页面里的动作按钮（"选择文件" / "执行分析" 等）
-        "action_button_font": ("SimHei", 12),
-        "action_button_padding": (20, 12),
-        # 是否切换主题（True 才能让上面颜色生效）
-        "use_clam_theme": False,
+        # ═══ 主背景 ═══
+        "window_bg": "#f0f2f5",
+        # ═══ 顶部导航按钮（普通态）═══
+        "nav_button_font": ("SimHei", 13, "bold"),
+        "nav_button_padding": (12, 18),
+        "nav_button_bg": "#2c3e50",         # 深蓝灰底
+        "nav_button_fg": "#bdc3c7",         # 浅灰字（不抢眼）
+        "nav_button_active_bg": "#34495e",  # 鼠标悬停略浅
+        "nav_button_active_fg": "#ffffff",
+        "nav_button_pressed_bg": "#1a252f", # 按下瞬间更深（视觉反馈）
+        # ═══ 顶部导航按钮（当前选中态）═══
+        "nav_selected_bg": "#3498db",       # 亮蓝高亮
+        "nav_selected_fg": "#ffffff",
+        "nav_selected_active_bg": "#5dade2",  # 当前选中按钮悬停时
+        # ═══ 各页面动作按钮 ═══
+        "action_button_font": ("SimHei", 12, "bold"),
+        "action_button_padding": (22, 10),
+        "action_button_bg": "#3498db",         # 亮蓝（和选中标签同色，统一）
+        "action_button_fg": "#ffffff",
+        "action_button_active_bg": "#5dade2",  # 悬停更浅一档
+        "action_button_active_fg": "#ffffff",
+        "action_button_pressed_bg": "#2874a6", # 按下更深一档
+        # ═══ 状态栏 ═══
+        "status_bar_bg": "#2c3e50",
+        "status_bar_fg": "#ecf0f1",
+        # ═══ 主题（True 才能让颜色生效）═══
+        "use_clam_theme": True,
     }
     # ═══════════════════════════════════════════════════════════════════
 
@@ -47,6 +61,7 @@ class App(tk.Tk):
         super().__init__()
         self.title("RFM 客户分群分析系统")
         self.geometry("1300x900")
+        self.configure(background=self.THEME["window_bg"])
 
         # 共享数据对象，子页面通过 self.app.xxx 访问
         self.loader = None
@@ -75,33 +90,73 @@ class App(tk.Tk):
             # clam 主题允许定制 ttk 控件颜色（默认主题不行）
             style.theme_use("clam")
 
-        # 基础样式：字体 + padding
-        style_kwargs = {
-            "font": self.THEME["nav_button_font"],
-            "padding": self.THEME["nav_button_padding"],
-        }
-        # 颜色：只有非 None 才传，避免覆盖系统默认
-        if self.THEME["nav_button_bg"]:
-            style_kwargs["background"] = self.THEME["nav_button_bg"]
-        if self.THEME["nav_button_fg"]:
-            style_kwargs["foreground"] = self.THEME["nav_button_fg"]
-        style.configure("Nav.TButton", **style_kwargs)
+        # ───── Nav.TButton（普通态导航按钮）─────
+        style.configure(
+            "Nav.TButton",
+            font=self.THEME["nav_button_font"],
+            padding=self.THEME["nav_button_padding"],
+            background=self.THEME["nav_button_bg"],
+            foreground=self.THEME["nav_button_fg"],
+            borderwidth=0,
+            focusthickness=0,
+        )
+        # 状态映射：active=hover, pressed=按下
+        style.map(
+            "Nav.TButton",
+            background=[
+                ("pressed", self.THEME["nav_button_pressed_bg"]),
+                ("active", self.THEME["nav_button_active_bg"]),
+            ],
+            foreground=[
+                ("active", self.THEME["nav_button_active_fg"]),
+            ],
+        )
 
-        # 鼠标悬停/按下时的颜色（map 而非 configure）
-        if self.THEME["nav_button_active_bg"] or self.THEME["nav_button_active_fg"]:
-            map_kwargs = {}
-            if self.THEME["nav_button_active_bg"]:
-                map_kwargs["background"] = [("active", self.THEME["nav_button_active_bg"])]
-            if self.THEME["nav_button_active_fg"]:
-                map_kwargs["foreground"] = [("active", self.THEME["nav_button_active_fg"])]
-            style.map("Nav.TButton", **map_kwargs)
+        # ───── NavSelected.TButton（当前选中导航按钮）─────
+        style.configure(
+            "NavSelected.TButton",
+            font=self.THEME["nav_button_font"],
+            padding=self.THEME["nav_button_padding"],
+            background=self.THEME["nav_selected_bg"],
+            foreground=self.THEME["nav_selected_fg"],
+            borderwidth=0,
+            focusthickness=0,
+        )
+        style.map(
+            "NavSelected.TButton",
+            background=[
+                ("active", self.THEME["nav_selected_active_bg"]),
+            ],
+        )
 
-        # ───── 各页面动作按钮样式 ─────
+        # ───── Action.TButton（各页面动作按钮）─────
         style.configure(
             "Action.TButton",
             font=self.THEME["action_button_font"],
             padding=self.THEME["action_button_padding"],
+            background=self.THEME["action_button_bg"],
+            foreground=self.THEME["action_button_fg"],
+            borderwidth=0,
+            focusthickness=0,
         )
+        style.map(
+            "Action.TButton",
+            background=[
+                ("pressed", self.THEME["action_button_pressed_bg"]),
+                ("active", self.THEME["action_button_active_bg"]),
+            ],
+            foreground=[
+                ("active", self.THEME["action_button_active_fg"]),
+            ],
+        )
+
+        # ───── 整体背景色 ─────
+        bg = self.THEME["window_bg"]
+        # ttk widget 的背景跟随 style.configure 的 TFrame / TLabel / TLabelframe
+        style.configure("TFrame", background=bg)
+        style.configure("TLabel", background=bg)
+        style.configure("TLabelframe", background=bg)
+        style.configure("TLabelframe.Label", background=bg)
 
         # ───── 顶部导航栏（6 个按钮平铺，像网页 nav） ─────
         nav_bar = ttk.Frame(self)
@@ -109,12 +164,16 @@ class App(tk.Tk):
 
         # ───── 底部状态栏 ─────
         # 先 pack 底部，让中间 container 自动占据剩余空间
-        status_bar = ttk.Label(
+        status_bar = tk.Label(
             self,
             textvariable=self.status_var,
-            relief="sunken",
+            background=self.THEME["status_bar_bg"],
+            foreground=self.THEME["status_bar_fg"],
+            font=("SimHei", 10),
+            relief="flat",
             anchor="w",
-            padding=(8, 4),
+            padx=10,
+            pady=6,
         )
         status_bar.pack(fill="x", side="bottom")
 
@@ -136,22 +195,23 @@ class App(tk.Tk):
             self.pages[label] = PageClass(container, app=self)
 
         # ───── 创建 6 个导航按钮（填满整行）─────
+        # 用 dict 保存每个按钮，切换页面时改对应按钮的 style 实现"高亮当前"
+        self.nav_buttons = {}
         for label, _ in page_specs:
-            # lambda 默认参数 trick：捕获当前 label，否则所有按钮都指向最后一个
             btn = ttk.Button(
                 nav_bar,
                 text=label,
                 command=lambda l=label: self.show_page(l),
                 style="Nav.TButton",
             )
-            # side="left" + expand=True + fill="both" → 6 个按钮平分整行宽度
             btn.pack(side="left", expand=True, fill="both")
+            self.nav_buttons[label] = btn
 
         # 默认显示首页
         self.show_page("主页 / 数据")
 
     def show_page(self, label):
-        """切换到指定标签的页面。"""
+        """切换到指定标签的页面，并把对应导航按钮高亮。"""
         # 隐藏当前页面（如果有）
         if self.current_page is not None:
             self.current_page.pack_forget()
@@ -159,6 +219,12 @@ class App(tk.Tk):
         target = self.pages[label]
         target.pack(fill="both", expand=True)
         self.current_page = target
+        # 更新导航按钮高亮状态：当前选中→NavSelected，其他→Nav
+        for btn_label, btn in self.nav_buttons.items():
+            if btn_label == label:
+                btn.configure(style="NavSelected.TButton")
+            else:
+                btn.configure(style="Nav.TButton")
 
     def set_status(self, text):
         """统一更新底部状态栏文字。子页面调它。"""

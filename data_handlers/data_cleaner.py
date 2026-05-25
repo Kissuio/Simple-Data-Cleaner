@@ -22,6 +22,9 @@ class DataCleaner(BaseDataHandler):
         
         before=len(self.df)
         self.df=self.df.dropna(subset=["CustomerID"])#dropna 去除NAN的值
+        # dropna 删完空值后 dtype 不会从 float64 自动回退到 int64，主动转回去
+        # 防止源数据带 NaN 时让 CustomerID 残留 ".0"（如 17850.0）
+        self.df["CustomerID"]=self.df["CustomerID"].astype("int64")
         after=len(self.df)
         self.report_change(before,after)
         return self.df
