@@ -1,5 +1,6 @@
 from data_handlers.base_data_handler import BaseDataHandler
 import pandas as pd
+import re 
 class FileLoader(BaseDataHandler):
     def __init__(self,file_path):
         super().__init__()
@@ -22,17 +23,18 @@ class FileLoader(BaseDataHandler):
     def load_file(self):
         """读取文件并归一化列名，存到 self.df 中，同时记录日志  
            详细列名归一化规则见 _normalize_columns 方法""" 
+        #正则
+        if not re.search(r"\.(csv|xlsx)$",self.file_path,re.IGNORECASE):
+            raise ValueError("不支持的文件格式，请上传 .xlsx 或 .csv")
 
-        if self.file_path.endswith(".xlsx"):
+        if self.file_path.lower().endswith(".xlsx"):
             self.df=pd.read_excel(self.file_path)
             msg=f"文件加载成功:{len(self.df)}行，格式为: '.xlsx' "
             self.log.append(msg)
-        elif self.file_path.endswith(".csv"):
+        elif self.file_path.lower().endswith(".csv"):
             self.df=pd.read_csv(self.file_path)
             msg=f"文件加载成功:{len(self.df)}行，格式为: '.csv' "
             self.log.append(msg)
-        else:
-            raise ValueError("不支持的文件格式，请上传 .xlsx 或 .csv")
         self._normalize_columns()
         return self.df
     
