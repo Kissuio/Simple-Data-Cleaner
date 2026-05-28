@@ -2,6 +2,24 @@ import pandas as pd
 from data_handlers.base_data_handler import BaseDataHandler
 
 class DataCleaner(BaseDataHandler):
+    """电商交易数据清洗器，继承 BaseDataHandler
+
+    针对 Online Retail 数据集的业务特性，提供 5 个独立清洗方法 +
+    1 个一键清洗入口。每个方法可单独调用便于调试，也可通过 clean_all()
+    按标准顺序一次执行。
+
+    清洗方法（按 clean_all 标准顺序）:
+        1. drop_missing_customer_id() —— 删除 CustomerID 缺失行
+        2. drop_cancellations()       —— 删除取消订单及其原始正单
+        3. drop_non_product_codes()   —— 删除非产品 StockCode 行
+        4. convert_date()             —— InvoiceDate 转 datetime
+        5. add_total_price()          —— 新增 TotalPrice 列
+
+    注意:
+        初始化时已对传入的 df 做 .copy()，所有清洗均在副本上进行，
+        不会污染原始 DataFrame。
+    """
+
     def __init__(self,df):
         """
         接收一个已加载的 DataFrame，初始化清洗器

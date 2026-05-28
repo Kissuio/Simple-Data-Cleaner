@@ -129,7 +129,7 @@ class Visualizer:
         返回 PNG 路径
         """
         weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-        plt.figure(figsize=(14, 5))
+        plt.figure(figsize=(12, 5))
         sns.heatmap(pivot, cmap="YlOrRd", annot=True, fmt=".0f", yticklabels=weekday_names)
         plt.title("订单数热力图（星期 × 小时）")
         plt.xlabel("小时")

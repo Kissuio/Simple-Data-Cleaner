@@ -2,6 +2,25 @@ from data_handlers.base_data_handler import BaseDataHandler
 import pandas as pd
 import re 
 class FileLoader(BaseDataHandler):
+    """电商数据文件加载器，继承 BaseDataHandler
+
+    负责从本地读取 .xlsx 或 .csv 数据，并在加载后自动对列名做归一化处理，
+    以兼容不同版本数据集的列名差异（如 Online Retail 与 Online Retail II
+    中 "InvoiceNo"/"Invoice"、"CustomerID"/"Customer ID"、
+    "UnitPrice"/"Price" 等）。
+
+    属性:
+        file_path (str): 待加载文件的路径
+        required_columns (list[str]): 必需字段列表（缺失抛错）
+        optional_columns (list[str]): 可选字段列表（缺失只记日志）
+        column_aliases (dict[str, list[str]]): 标准列名 → 别名列表
+
+    主要方法:
+        load_file()          —— 读取文件 + 列名归一化
+        check_columns()      —— 校验必需/可选字段是否齐全
+        _normalize_columns() —— 私有方法，基于别名字典统一列名
+    """
+    
     def __init__(self,file_path):
         super().__init__()
         self.file_path=file_path

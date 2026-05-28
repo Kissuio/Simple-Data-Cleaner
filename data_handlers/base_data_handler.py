@@ -1,6 +1,26 @@
 class BaseDataHandler:
-    #初始化空一点吧
+    """数据处理类的公共父类
+
+    为所有数据处理子类（FileLoader / DataCleaner / RFMAnalyzer）提供
+    共用属性与基础方法，体现 OOP 的继承与封装思想。
+
+    属性:
+        df (pandas.DataFrame | None): 当前持有的数据；初始化为 None
+        log (list[str]): 操作日志列表，子类按需追加
+
+    提供的基础方法:
+        validate()      —— 校验 self.df 是否为有效数据
+        report_change() —— 记录前后行数变化并写入日志
+    """
     def __init__(self):
+       """初始化空容器
+
+        属性:
+            df: pandas.DataFrame | None
+                子类加载/接收数据后填充
+            log: list[str]
+                操作日志，按需追加字符串
+       """
        self.df=None 
        self.log=[]  
        
