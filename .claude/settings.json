@@ -3,7 +3,11 @@
     "allow": [
       "Bash(.venv/Scripts/python.exe -m pip install -i https://pypi.org/simple/ flask)",
       "WebFetch(domain:career.hypergryph.com)",
-      "WebSearch"
+      "WebSearch",
+      "PowerShell($env:PYTHONIOENCODING = 'utf-8'; python -c \"from gui.window import App; from gui.pages.home_page import HomePage; from gui.pages.load_page import LoadPage; from gui.pages.cleaner_page import CleanerPage; from gui.pages.rfm_page import RFMPage; from gui.pages.sales_page import SalesPage; from gui.pages.product_page import ProductPage; from gui.pages.overview_page import OverviewPage; from gui.ai_dialog import AIDialog; from gui.widgets import build_table; print\\('ALL IMPORT OK'\\)\")",
+      "PowerShell($env:PYTHONIOENCODING = 'utf-8'; python -c \"from gui.window import App; app = App\\(\\); app.show_page\\('数据清洗'\\); app.destroy\\(\\); print\\('OK'\\)\")",
+      "Bash(git -C \"d:/期末项目\" diff --stat)",
+      "Bash(git -C \"d:/期末项目\" log --oneline -10)"
     ]
   }
 }

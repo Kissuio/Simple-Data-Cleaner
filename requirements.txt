@@ -10,8 +10,9 @@ openpyxl==3.1.5          # pandas 读取 .xlsx 文件的隐式依赖（不装会
 matplotlib==3.10.9       # 8 张图表的画图引擎
 seaborn==0.13.2          # 周×小时热力图
 
-# ===== GUI 图片显示 =====
-pillow==12.2.0           # Tkinter 显示 PNG（缩略图、大图预览）
+# ===== GUI =====
+pillow==12.2.0           # 图片显示（缩略图、大图预览、CTkImage 底层）
+customtkinter==5.2.2     # 现代 Tkinter UI 库（圆角、亮/暗主题、统一字体）
 
 # ===== AI 解读 =====
 openai==2.38.0           # OpenAI 兼容协议（同时支持 DeepSeek/Moonshot/智谱等）

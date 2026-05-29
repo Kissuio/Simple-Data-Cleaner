@@ -1,4 +1,4 @@
-"""AI 解读独立窗口（OverviewPage 的【AI 解读】按钮点击后弹出）。
+"""AI 解读独立窗口（OverviewPage 的【AI 解读】按钮弹出，customtkinter 版本）。
 
 设计：
 - 通过 OpenAI 兼容协议接入任意 AI 服务（OpenAI/DeepSeek/Moonshot/智谱/自定义）
@@ -11,8 +11,10 @@
 
 import base64
 from pathlib import Path
-from tkinter import ttk, messagebox, filedialog
-import tkinter as tk
+from tkinter import messagebox, filedialog
+import customtkinter as ctk
+
+from gui.widgets import BORDER_WIDTH, UI_COLORS as COLORS
 
 
 # 预设的 OpenAI 兼容服务商 base_url
@@ -45,14 +47,15 @@ CHARTS = [
 ]
 
 
-class AIDialog(tk.Toplevel):
-    """AI 解读独立窗口。"""
+class AIDialog(ctk.CTkToplevel):
+    """AI 解读独立窗口（CTkToplevel 而非 tk.Toplevel）。"""
 
     def __init__(self, master, app):
         super().__init__(master)
         self.app = app
         self.title("AI 解读")
         self.geometry("900x800")
+        self.configure(fg_color=COLORS["page_bg"])
 
         # 自传图的路径（自定义模式下）
         self.custom_image_path = None
@@ -61,109 +64,158 @@ class AIDialog(tk.Toplevel):
 
     def _build_ui(self):
         # ───── AI 配置区 ─────
-        config_frame = ttk.LabelFrame(self, text="AI 配置", padding=10)
-        config_frame.pack(fill="x", padx=10, pady=(10, 5))
+        config_frame = self._make_section_frame("AI 配置")
+        config_frame.pack(fill="x", padx=15, pady=(15, 8))
 
         # AI 供应商
-        row = ttk.Frame(config_frame); row.pack(fill="x", pady=2)
-        ttk.Label(row, text="AI 供应商:", width=12).pack(side="left")
-        self.provider_var = tk.StringVar(value="OpenAI")
-        combo = ttk.Combobox(
-            row, textvariable=self.provider_var,
-            values=list(PROVIDERS.keys()), state="readonly", width=15,
+        row = ctk.CTkFrame(config_frame, fg_color="transparent", corner_radius=0)
+        row.pack(fill="x", padx=15, pady=4)
+        ctk.CTkLabel(row, text="AI 供应商:", width=80, anchor="w",
+                     font=("SimHei", 11)).pack(side="left")
+        self.provider_var = ctk.StringVar(value="OpenAI")
+        provider_menu = ctk.CTkOptionMenu(
+            row, variable=self.provider_var,
+            values=list(PROVIDERS.keys()),
+            command=self._on_provider_change,
+            font=("SimHei", 11),
+            width=160,
         )
-        combo.pack(side="left", padx=5)
-        combo.bind("<<ComboboxSelected>>", self._on_provider_change)
+        provider_menu.pack(side="left", padx=5)
 
         # Base URL
-        row = ttk.Frame(config_frame); row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Base URL:", width=12).pack(side="left")
-        self.base_url_var = tk.StringVar(value=PROVIDERS["OpenAI"])
-        ttk.Entry(row, textvariable=self.base_url_var).pack(
-            side="left", padx=5, fill="x", expand=True
-        )
+        row = ctk.CTkFrame(config_frame, fg_color="transparent", corner_radius=0)
+        row.pack(fill="x", padx=15, pady=4)
+        ctk.CTkLabel(row, text="Base URL:", width=80, anchor="w",
+                     font=("SimHei", 11)).pack(side="left")
+        self.base_url_var = ctk.StringVar(value=PROVIDERS["OpenAI"])
+        ctk.CTkEntry(
+            row, textvariable=self.base_url_var, font=("SimHei", 11),
+        ).pack(side="left", padx=5, fill="x", expand=True)
 
-        # API Key（show="*" 显示成密文）
-        row = ttk.Frame(config_frame); row.pack(fill="x", pady=2)
-        ttk.Label(row, text="API Key:", width=12).pack(side="left")
-        self.api_key_var = tk.StringVar()
-        ttk.Entry(row, textvariable=self.api_key_var, show="*").pack(
-            side="left", padx=5, fill="x", expand=True
-        )
+        # API Key
+        row = ctk.CTkFrame(config_frame, fg_color="transparent", corner_radius=0)
+        row.pack(fill="x", padx=15, pady=4)
+        ctk.CTkLabel(row, text="API Key:", width=80, anchor="w",
+                     font=("SimHei", 11)).pack(side="left")
+        self.api_key_var = ctk.StringVar()
+        ctk.CTkEntry(
+            row, textvariable=self.api_key_var, font=("SimHei", 11),
+            show="*",  # 密文显示
+        ).pack(side="left", padx=5, fill="x", expand=True)
 
         # Model
-        row = ttk.Frame(config_frame); row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Model:", width=12).pack(side="left")
-        self.model_var = tk.StringVar(value="gpt-4o-mini")
-        ttk.Entry(row, textvariable=self.model_var, width=30).pack(side="left", padx=5)
-        ttk.Label(
+        row = ctk.CTkFrame(config_frame, fg_color="transparent", corner_radius=0)
+        row.pack(fill="x", padx=15, pady=(4, 10))
+        ctk.CTkLabel(row, text="Model:", width=80, anchor="w",
+                     font=("SimHei", 11)).pack(side="left")
+        self.model_var = ctk.StringVar(value="gpt-4o-mini")
+        ctk.CTkEntry(
+            row, textvariable=self.model_var, font=("SimHei", 11), width=280,
+        ).pack(side="left", padx=5)
+        ctk.CTkLabel(
             row, text="（需 vision 模型，如 gpt-4o / moonshot-v1-8k-vision-preview）",
-            foreground="gray",
+            text_color=COLORS["muted"], font=("SimHei", 10),
         ).pack(side="left", padx=5)
 
         # ───── 图片来源 ─────
-        source_frame = ttk.LabelFrame(self, text="图片来源", padding=10)
-        source_frame.pack(fill="x", padx=10, pady=5)
-        self.source_var = tk.StringVar(value="all8")
-        ttk.Radiobutton(
+        source_frame = self._make_section_frame("图片来源")
+        source_frame.pack(fill="x", padx=15, pady=8)
+
+        self.source_var = ctk.StringVar(value="all8")
+        ctk.CTkRadioButton(
             source_frame, text="一键分析项目 8 张图（顺序逐张解读）",
             variable=self.source_var, value="all8",
-        ).pack(anchor="w", pady=2)
-        custom_row = ttk.Frame(source_frame); custom_row.pack(fill="x", pady=2)
-        ttk.Radiobutton(
+            font=("SimHei", 11),
+        ).pack(anchor="w", padx=15, pady=(10, 4))
+
+        custom_row = ctk.CTkFrame(source_frame, fg_color="transparent", corner_radius=0)
+        custom_row.pack(fill="x", padx=15, pady=(0, 10))
+        ctk.CTkRadioButton(
             custom_row, text="上传自定义图：",
             variable=self.source_var, value="custom",
+            font=("SimHei", 11),
         ).pack(side="left")
-        ttk.Button(custom_row, text="选择图片...", command=self._on_pick_image).pack(
-            side="left", padx=5
-        )
-        self.custom_label_var = tk.StringVar(value="（未选择）")
-        ttk.Label(custom_row, textvariable=self.custom_label_var, foreground="gray").pack(
-            side="left", padx=5
-        )
+        ctk.CTkButton(
+            custom_row, text="选择图片...", command=self._on_pick_image,
+            fg_color=COLORS["blue"], hover_color=COLORS["blue_hover"],
+            font=("SimHei", 11), height=28, width=110, corner_radius=6,
+        ).pack(side="left", padx=8)
+        self.custom_label_var = ctk.StringVar(value="（未选择）")
+        ctk.CTkLabel(
+            custom_row, textvariable=self.custom_label_var,
+            text_color=COLORS["muted"], font=("SimHei", 11),
+        ).pack(side="left", padx=5)
 
         # ───── Prompt 模板 ─────
-        prompt_frame = ttk.LabelFrame(self, text="Prompt 模板（可编辑）", padding=10)
-        prompt_frame.pack(fill="x", padx=10, pady=5)
-        self.prompt_text = tk.Text(prompt_frame, height=5, font=("SimHei", 10), wrap="word")
-        self.prompt_text.pack(fill="x")
+        prompt_frame = self._make_section_frame("Prompt 模板（可编辑）")
+        prompt_frame.pack(fill="x", padx=15, pady=8)
+
+        self.prompt_text = ctk.CTkTextbox(
+            prompt_frame, height=100, font=("SimHei", 11),
+            fg_color=COLORS["panel_bg"], text_color=COLORS["text"],
+            border_color=COLORS["border"], border_width=BORDER_WIDTH, corner_radius=6,
+            wrap="word",
+        )
+        self.prompt_text.pack(fill="x", padx=15, pady=(8, 12))
         self.prompt_text.insert("1.0", DEFAULT_PROMPT)
 
         # ───── 操作按钮 ─────
-        action_frame = ttk.Frame(self); action_frame.pack(fill="x", padx=10, pady=5)
-        ttk.Button(
+        action_frame = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
+        action_frame.pack(fill="x", padx=15, pady=8)
+
+        ctk.CTkButton(
             action_frame, text="开始解读", command=self._on_start,
-            style="Action.TButton",
+            fg_color=COLORS["blue"], hover_color=COLORS["blue_hover"],
+            font=("SimHei", 12, "bold"), height=36, width=120, corner_radius=6,
         ).pack(side="left")
-        ttk.Button(
+
+        self.progress_var = ctk.StringVar(value="")
+        ctk.CTkLabel(
+            action_frame, textvariable=self.progress_var,
+            text_color=COLORS["muted"], font=("SimHei", 11),
+        ).pack(side="left", padx=15)
+
+        ctk.CTkButton(
             action_frame, text="导出 AI 建议", command=self._on_export_result,
-            style="Action.TButton",
+            fg_color=COLORS["green"], hover_color=COLORS["green_hover"],
+            font=("SimHei", 12, "bold"), height=36, width=140, corner_radius=6,
         ).pack(side="right")
-        self.progress_var = tk.StringVar(value="")
-        ttk.Label(action_frame, textvariable=self.progress_var, foreground="gray").pack(
-            side="left", padx=10
-        )
 
         # ───── AI 返回区 ─────
-        result_frame = ttk.LabelFrame(self, text="AI 返回", padding=10)
-        result_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))
-        self.result_text = tk.Text(result_frame, font=("SimHei", 11), wrap="word")
-        scrollbar = ttk.Scrollbar(
-            result_frame, orient="vertical", command=self.result_text.yview
+        result_frame = self._make_section_frame("AI 返回")
+        result_frame.pack(fill="both", expand=True, padx=15, pady=(8, 15))
+
+        self.result_text = ctk.CTkTextbox(
+            result_frame, font=("SimHei", 11),
+            fg_color=COLORS["panel_bg"], text_color=COLORS["text"],
+            border_color=COLORS["border"], border_width=BORDER_WIDTH, corner_radius=6,
+            wrap="word",
         )
-        self.result_text.configure(yscrollcommand=scrollbar.set)
-        self.result_text.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        self.result_text.pack(fill="both", expand=True, padx=15, pady=(8, 12))
+
+    def _make_section_frame(self, title):
+        """构造一个带顶部小标题的分组 Frame（替代 ttk.LabelFrame）。"""
+        outer = ctk.CTkFrame(
+            self,
+            fg_color=COLORS["panel_bg"],
+            border_color=COLORS["border"],
+            border_width=BORDER_WIDTH,
+            corner_radius=8,
+        )
+        ctk.CTkLabel(
+            outer, text=title,
+            font=("SimHei", 11, "bold"), text_color=COLORS["muted"], anchor="w",
+        ).pack(fill="x", padx=15, pady=(8, 0))
+        return outer
 
     # ───── 回调 ─────
 
-    def _on_provider_change(self, event=None):
+    def _on_provider_change(self, choice=None):
         """选了供应商，自动填默认 base_url。"""
         provider = self.provider_var.get()
         self.base_url_var.set(PROVIDERS.get(provider, ""))
 
     def _on_pick_image(self):
-        """选自定义图片。"""
         path = filedialog.askopenfilename(
             title="选择图片",
             filetypes=[
@@ -177,7 +229,6 @@ class AIDialog(tk.Toplevel):
             return
         self.custom_image_path = path
         self.custom_label_var.set(Path(path).name)
-        # 自动切到"自定义"模式
         self.source_var.set("custom")
 
     def _on_start(self):
@@ -187,7 +238,6 @@ class AIDialog(tk.Toplevel):
         model = self.model_var.get().strip()
         prompt = self.prompt_text.get("1.0", "end").strip()
 
-        # 输入校验
         if not api_key:
             messagebox.showwarning("缺少 API Key", "请填入 AI 服务商的 API Key。")
             return
@@ -225,7 +275,7 @@ class AIDialog(tk.Toplevel):
         # 清空返回区
         self.result_text.delete("1.0", "end")
 
-        # 初始化 OpenAI client
+        # 初始化 OpenAI client（延迟 import）
         try:
             from openai import OpenAI
             client = OpenAI(api_key=api_key, base_url=base_url)
@@ -233,18 +283,16 @@ class AIDialog(tk.Toplevel):
             messagebox.showerror("初始化失败", f"无法创建 OpenAI client：\n{e}")
             return
 
-        # 逐张调 API（同步，用 update_idletasks 让用户看到进度）
+        # 逐张调 API
         for i, (name, path) in enumerate(images, 1):
             self.progress_var.set(f"正在处理 {i}/{len(images)}: {name}...")
             self.update_idletasks()
 
             try:
-                # 编码图片为 base64
                 with open(path, "rb") as f:
                     img_b64 = base64.b64encode(f.read()).decode("utf-8")
                 data_url = f"data:image/png;base64,{img_b64}"
 
-                # 调 API（OpenAI 兼容协议，content 是 list 时支持 vision）
                 response = client.chat.completions.create(
                     model=model,
                     messages=[
@@ -261,7 +309,6 @@ class AIDialog(tk.Toplevel):
             except Exception as e:
                 content = f"[调用失败] {type(e).__name__}: {e}"
 
-            # 追加到结果区，并滚到底部
             self.result_text.insert(
                 "end", f"\n{'=' * 60}\n【{name}】\n{'=' * 60}\n\n{content}\n"
             )
