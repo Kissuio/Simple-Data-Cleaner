@@ -98,9 +98,4 @@ python main.py
 
 完整版本号见 [requirements.txt](requirements.txt)。
 
-## 作者
 
-- 姓名：（待填写）
-- 学号：（待填写）
-- 班级：（待填写）
-- 专业：上海大学 信息管理专业
