@@ -742,10 +742,8 @@ class HomePage(ctk.CTkFrame):
             panel,
             fg_color="transparent",
             corner_radius=0,
-            height=84,
         )
         insights.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 20))
-        insights.grid_propagate(False)
         insights.grid_rowconfigure(0, weight=1)
         for col_idx in range(3):
             insights.grid_columnconfigure(col_idx, weight=1, uniform="star_insight")
@@ -836,10 +834,8 @@ class HomePage(ctk.CTkFrame):
             fg_color="#ffffff",
             border_color=COLORS["border"],
             border_width=BORDER_WIDTH,
-            height=76,
             corner_radius=8,
         )
-        card.grid_propagate(False)
         card.grid_columnconfigure(1, weight=1)
         card.grid_rowconfigure(0, weight=0)
         card.grid_rowconfigure(1, weight=1)
@@ -860,29 +856,31 @@ class HomePage(ctk.CTkFrame):
         ).grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=(9, 1))
 
         content = ctk.CTkFrame(card, fg_color="transparent", corner_radius=0)
-        content.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=(0, 9))
+        content.grid(row=1, column=1, sticky="nsew", padx=(0, 14), pady=(0, 14))
         content.grid_columnconfigure(0, weight=1)
-        content.grid_columnconfigure(1, weight=1)
+        content.grid_rowconfigure(0, weight=1)
+        content.grid_rowconfigure(1, weight=1)
 
         ctk.CTkLabel(
             content,
             textvariable=value_var,
             fg_color=soft,
             text_color=accent,
-            font=("SimHei", 12, "bold"),
+            font=("Microsoft YaHei UI", 18, "bold"),
             corner_radius=6,
-            anchor="w",
-            height=30,
-        ).grid(row=0, column=0, sticky="ew", padx=(0, 7))
+            anchor="center",
+            height=42,
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 10))
 
         ctk.CTkLabel(
             content,
             textvariable=note_var,
-            font=("SimHei", 9),
+            font=("SimHei", 13),
             text_color=COLORS["muted"],
-            anchor="w",
-            wraplength=150,
-        ).grid(row=0, column=1, sticky="ew")
+            anchor="center",
+            justify="center",
+            wraplength=220,
+        ).grid(row=1, column=0, sticky="nsew")
         return card
 
     def on_show(self):

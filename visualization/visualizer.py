@@ -1,7 +1,29 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 class Visualizer:
+    """图表绘制器（纯画图类，不继承数据处理父类）
+
+    接收已聚合好的数据，用 matplotlib / seaborn 画图、存为 PNG 并返回路径。
+    本身不做业务聚合——大表的聚合放在 sales_trend.py / product_analysis.py，
+    Visualizer 只负责"拿到结果数据 → 画 → 存图"。
+
+    8 个画图方法（对应项目 8 张图表）:
+        plot_label_pie()             —— 8 类客户占比饼图
+        plot_label_avg_spend()       —— 各类客户人均消费柱图
+        plot_rfm_scatter()           —— RFM 客户分布气泡图
+        plot_monthly_trend()         —— 月度销售趋势折线图
+        plot_top_quantity()          —— TOP10 销量横向柱图
+        plot_top_revenue()           —— TOP10 销售额横向柱图
+        plot_price_distribution()    —— 成交单价分布直方图（对数刻度）
+        plot_weekday_hour_heatmap()  —— 星期 × 小时订单数热力图
+
+    属性:
+        output_dir (str): 图表 PNG 的保存目录，默认 "output"
+    """
+
     def __init__(self, output_dir="output"):
         """
         可视化类的初始化，  
@@ -9,7 +31,10 @@ class Visualizer:
         并设置 matplotlib 中文字体。
         """
 
-        self.output_dir=output_dir
+        # 用 Path 包装目录，并确保它存在（不存在就连父级一起创建，已存在不报错）
+        # 否则换机器/清空仓库后首次 savefig 会因目录缺失抛 FileNotFoundError
+        self.output_dir=Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         plt.rcParams['font.sans-serif'] = ['SimHei']
         plt.rcParams['axes.unicode_minus'] = False
 
@@ -23,10 +48,10 @@ class Visualizer:
         plt.figure(figsize=(8,8))
         plt.pie(counts,labels=counts.index,autopct="%1.1f%%")
         plt.title("客户8大分类占比")
-        path=f"{self.output_dir}/label_pie.png"
+        path=self.output_dir / "label_pie.png"
         plt.savefig(path)
         plt.close()
-        return path
+        return str(path)
     
     def plot_label_avg_spend(self,rfm):
         """画出8类客户的消费柱状图,    
@@ -41,10 +66,10 @@ class Visualizer:
         plt.ylabel("人均消费金额")
         plt.xticks(rotation=30)
         plt.tight_layout()
-        path=f"{self.output_dir}/label_avg_spend.png"
+        path=self.output_dir / "label_avg_spend.png"
         plt.savefig(path)
         plt.close()
-        return path
+        return str(path)
     
     def plot_rfm_scatter(self, rfm):
         """RFM 气泡图，   
@@ -63,10 +88,10 @@ class Visualizer:
         plt.ylabel("Frequency（消费频次，对数刻度）")
         plt.title("RFM 客户分布气泡图（点越大，消费金额越高）")
         plt.legend()
-        path = f"{self.output_dir}/rfm_scatter.png"
+        path = self.output_dir / "rfm_scatter.png"
         plt.savefig(path, bbox_inches="tight")
         plt.close()
-        return path
+        return str(path)
     
     def plot_monthly_trend(self, monthly):
         """月销售额折线图,  
@@ -82,10 +107,10 @@ class Visualizer:
         plt.ylabel("销售总额")
         plt.xticks(rotation=45)
         plt.tight_layout()
-        path = f"{self.output_dir}/monthly_trend.png"
+        path = self.output_dir / "monthly_trend.png"
         plt.savefig(path)
         plt.close()
-        return path
+        return str(path)
 
     def plot_top_quantity(self, top_quantity):
         """TOP10 销量横向柱状图,
@@ -100,10 +125,10 @@ class Visualizer:
         plt.bar_label(bars, padding=3)
         plt.title("TOP10 热销商品（按销量）")
         plt.xlabel("销量")
-        path = f"{self.output_dir}/top_quantity.png"
+        path = self.output_dir / "top_quantity.png"
         plt.savefig(path, bbox_inches="tight")
         plt.close()
-        return path
+        return str(path)
     
     def plot_price_distribution(self, prices):
         """成交单价分布直方图（x 轴对数刻度），
@@ -118,10 +143,10 @@ class Visualizer:
         plt.title("成交单价分布（对数刻度）")
         plt.xlabel("单价（英镑，对数刻度）")
         plt.ylabel("成交笔数")
-        path = f"{self.output_dir}/price_distribution.png"
+        path = self.output_dir / "price_distribution.png"
         plt.savefig(path, bbox_inches="tight")
         plt.close()
-        return path
+        return str(path)
 
     def plot_weekday_hour_heatmap(self, pivot):
         """订单数热力图（星期 × 小时），
@@ -134,10 +159,10 @@ class Visualizer:
         plt.title("订单数热力图（星期 × 小时）")
         plt.xlabel("小时")
         plt.ylabel("星期")
-        path = f"{self.output_dir}/weekday_hour_heatmap.png"
+        path = self.output_dir / "weekday_hour_heatmap.png"
         plt.savefig(path, bbox_inches="tight")
         plt.close()
-        return path
+        return str(path)
 
     def plot_top_revenue(self,top_revenue):
         """TOP10 销售额横向柱状图,
@@ -150,10 +175,10 @@ class Visualizer:
         plt.bar_label(bars,padding=3)
         plt.title("TOP10 热销商品（按销售额）")
         plt.xlabel("销售额")
-        path = f"{self.output_dir}/top_revenue.png"
+        path = self.output_dir / "top_revenue.png"
         plt.savefig(path, bbox_inches="tight")
         plt.close()
-        return path
+        return str(path)
 
 
 

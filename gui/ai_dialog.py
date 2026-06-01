@@ -62,6 +62,19 @@ class AIDialog(ctk.CTkToplevel):
 
         self._build_ui()
 
+        # ── 让 AI 弹窗始终在主窗口前面 ──
+        # transient: 把本窗口标记为 master 的"附属窗口"，
+        #            主窗口移动/最小化时本窗口跟随，且总在主窗口之上
+        # after(100, ...): customtkinter 的 CTkToplevel 构造完立即 lift 经常不生效，
+        #                  延迟 100ms 等窗口完全初始化后再提升
+        self.transient(master)
+        self.after(100, self._raise_to_front)
+
+    def _raise_to_front(self):
+        """把窗口提到最前并强制拿到焦点。"""
+        self.lift()
+        self.focus_force()
+
     def _build_ui(self):
         # ───── AI 配置区 ─────
         config_frame = self._make_section_frame("AI 配置")

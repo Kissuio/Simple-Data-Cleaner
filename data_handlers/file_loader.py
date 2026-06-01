@@ -22,6 +22,16 @@ class FileLoader(BaseDataHandler):
     """
     
     def __init__(self,file_path):
+        """接收文件路径，初始化加载器并设定字段规则
+
+        参数:
+            file_path (str): 待加载的 .xlsx 或 .csv 文件路径
+
+        初始化的属性:
+            required_columns: 必需字段列表，缺失会在 check_columns 抛错
+            optional_columns: 可选字段列表，缺失只记日志（功能降级）
+            column_aliases:   标准列名 → 别名列表，供 _normalize_columns 归一化
+        """
         super().__init__()
         self.file_path=file_path
         self.required_columns=[

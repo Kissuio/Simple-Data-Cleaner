@@ -1,6 +1,22 @@
 from data_handlers.base_data_handler import BaseDataHandler
 import pandas as pd
 class RFMAnalyzer(BaseDataHandler):
+    """RFM 客户价值分析器，继承 BaseDataHandler
+
+    接收清洗后的交易数据，按 RFM 模型计算每个客户的 Recency / Frequency /
+    Monetary 三维指标，按均值打分（高/低），再组合成 8 类标准客户标签。
+    每个方法可单独调用便于调试，也可通过 analyze_all() 按标准顺序一次执行。
+
+    分析方法（按 analyze_all 标准顺序）:
+        1. calc_rfm()       —— 计算 R/F/M 三个原始值
+        2. score_rfm()      —— 按各维度均值打 高/低 分（1/0）
+        3. label_customer() —— 按打分组合贴 8 类客户标签（Label 列）
+
+    属性:
+        df (pandas.DataFrame): 传入的清洗后数据（只读，不修改）
+        rfm (pandas.DataFrame | None): 分析结果表；调用 calc_rfm() 后才有值
+    """
+
     def __init__(self,df):
         """初始化,  
         与BaseDataHandler有共同成分满足继承条件,  
