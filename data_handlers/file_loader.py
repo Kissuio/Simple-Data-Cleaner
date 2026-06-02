@@ -56,14 +56,19 @@ class FileLoader(BaseDataHandler):
         if not re.search(r"\.(csv|xlsx)$",self.file_path,re.IGNORECASE):
             raise ValueError("不支持的文件格式，请上传 .xlsx 或 .csv")
 
-        if self.file_path.lower().endswith(".xlsx"):
-            self.df=pd.read_excel(self.file_path)
-            msg=f"文件加载成功:{len(self.df)}行，格式为: '.xlsx' "
-            self.log.append(msg)
-        elif self.file_path.lower().endswith(".csv"):
-            self.df=pd.read_csv(self.file_path)
-            msg=f"文件加载成功:{len(self.df)}行，格式为: '.csv' "
-            self.log.append(msg)
+        # try/except 接住运行时错误：文件不存在时 pd.read_xxx 会抛 FileNotFoundError，
+        # 这里接住后改抛一条清楚的中文提示，便于定位（GUI 的 except Exception 会把它显示在弹窗里）
+        try:
+            if self.file_path.lower().endswith(".xlsx"):
+                self.df=pd.read_excel(self.file_path)
+                msg=f"文件加载成功:{len(self.df)}行，格式为: '.xlsx' "
+                self.log.append(msg)
+            elif self.file_path.lower().endswith(".csv"):
+                self.df=pd.read_csv(self.file_path)
+                msg=f"文件加载成功:{len(self.df)}行，格式为: '.csv' "
+                self.log.append(msg)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"文件不存在，请检查路径：{self.file_path}")
         self._normalize_columns()
         return self.df
     

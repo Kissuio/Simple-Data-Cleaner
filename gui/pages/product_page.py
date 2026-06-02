@@ -263,6 +263,7 @@ class ProductPage(BasePage):
         return self.app.visualizer
 
     def _on_top_quantity(self):
+        """生成「TOP10 热销商品（按销量）」图并展示，同时更新洞察与进度。"""
         if not self._ensure_cleaner():
             return
         try:
@@ -279,6 +280,7 @@ class ProductPage(BasePage):
         self.app.set_status(f"已生成：{path}")
 
     def _on_top_revenue(self):
+        """生成「TOP10 商品（按销售额）」图并展示，同时更新洞察与进度。"""
         if not self._ensure_cleaner():
             return
         try:
@@ -295,6 +297,7 @@ class ProductPage(BasePage):
         self.app.set_status(f"已生成：{path}")
 
     def _on_price_distribution(self):
+        """生成「成交单价分布」图并展示，同时更新洞察与进度。"""
         if not self._ensure_cleaner():
             return
         try:

@@ -85,6 +85,9 @@ class App(ctk.CTk):
         super().__init__()
         self.title("RFM 客户分群分析系统")
         self.geometry("1300x900")
+        # 启动即最大化：窗口过小会让仪表盘/图表布局拥挤变形，最大化后铺满屏幕
+        # 用 after 延迟调用更稳妥（customtkinter 缩放在窗口建好后再 zoomed）
+        self.after(0, lambda: self.state("zoomed"))
 
         # ───── 共享数据对象（子页面通过 self.app.xxx 访问） ─────
         self.loader = None

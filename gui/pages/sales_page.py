@@ -244,6 +244,7 @@ class SalesPage(BasePage):
         return self.app.visualizer
 
     def _on_monthly_trend(self):
+        """生成「月度销售趋势」图并展示，同时更新洞察与进度。"""
         if not self._ensure_cleaner():
             return
         try:
@@ -260,6 +261,7 @@ class SalesPage(BasePage):
         self.app.set_status(f"已生成：{path}")
 
     def _on_weekday_hour(self):
+        """生成「订单数热力图（星期 × 小时）」并展示，同时更新洞察与进度。"""
         if not self._ensure_cleaner():
             return
         try:

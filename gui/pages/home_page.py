@@ -1377,4 +1377,5 @@ class HomePage(ctk.CTkFrame):
         return max(0, min(1, value / total))
 
     def _go_next_step(self):
+        """跳转到当前页配置的下一步页面。"""
         self.app.show_page(self.next_page)

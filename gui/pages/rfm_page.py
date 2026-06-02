@@ -388,6 +388,7 @@ class RFMPage(BasePage):
         return True
 
     def _on_analyze_all(self):
+        """一键执行完整 RFM 分析，结果存入 app 并刷新展示。"""
         if not self._ensure_cleaner():
             return
         try:
@@ -403,6 +404,7 @@ class RFMPage(BasePage):
         self.app.set_status(f"已完成 RFM 分析：{len(analyzer.rfm)} 个客户")
 
     def _on_reset(self):
+        """重置 RFM 分析器，清空已有分析结果。"""
         if not self._ensure_cleaner():
             return
         self.app.rfm_analyzer = RFMAnalyzer(self.app.cleaner.df)

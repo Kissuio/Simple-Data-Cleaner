@@ -229,6 +229,7 @@ class AIDialog(ctk.CTkToplevel):
         self.base_url_var.set(PROVIDERS.get(provider, ""))
 
     def _on_pick_image(self):
+        """弹出文件对话框选择自定义图片，记录路径并把图源切换为「自定义」。"""
         path = filedialog.askopenfilename(
             title="选择图片",
             filetypes=[

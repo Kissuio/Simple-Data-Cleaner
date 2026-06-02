@@ -371,6 +371,7 @@ class OverviewPage(BasePage):
         return self.app.visualizer
 
     def _on_generate_all(self):
+        """一键生成全部 8 张图表（保存到 output/ 目录）并刷新状态与预览。"""
         if not self._ensure_data():
             return
         viz = self._get_visualizer()
