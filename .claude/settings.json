@@ -3,7 +3,14 @@
     "allow": [
       "WebSearch",
       "Bash(git -C \"d:/期末项目\" diff --stat)",
-      "Bash(git -C \"d:/期末项目\" log --oneline -10)"
+      "Bash(git -C \"d:/期末项目\" log --oneline -10)",
+      "Bash(MPLBACKEND=Agg PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 MPLBACKEND=Agg python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(python -m py_compile gui/window.py gui/mapping_dialog.py gui/filter_bar.py gui/widgets.py gui/pages/base_page.py gui/pages/cleaner_page.py gui/pages/load_page.py gui/pages/home_page.py gui/pages/rfm_page.py gui/pages/sales_page.py gui/pages/product_page.py gui/pages/overview_page.py data_handlers/field_mapping.py)",
+      "Bash(python -c ' *)",
+      "Bash(python -m py_compile gui/filter_bar.py)",
+      "Bash(python -m py_compile gui/mapping_dialog.py data_handlers/field_mapping.py)"
     ],
     "additionalDirectories": [
       "d:\\期末项目"

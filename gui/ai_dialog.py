@@ -3,7 +3,7 @@
 设计：
 - 通过 OpenAI 兼容协议接入任意 AI 服务（OpenAI/DeepSeek/Moonshot/智谱/自定义）
 - 用户填 base_url + api_key + model，API Key 不存盘
-- 图片来源：项目 8 张图（顺序逐张解读）或自定义上传一张
+- 图片来源：项目 9 张图（顺序逐张解读）或自定义上传一张
 - Prompt 模板可编辑
 
 依赖：openai SDK（pip install openai）
@@ -14,6 +14,7 @@ from pathlib import Path
 from tkinter import messagebox, filedialog
 import customtkinter as ctk
 
+from gui.error_messages import friendly_error_message, show_friendly_error
 from gui.widgets import BORDER_WIDTH, UI_COLORS as COLORS
 
 
@@ -34,7 +35,7 @@ DEFAULT_PROMPT = (
     "500 字以内，分点清晰。"
 )
 
-# 项目 8 张图清单（和 OverviewPage 保持一致）
+# 项目 9 张图清单（和 OverviewPage 保持一致）
 CHARTS = [
     ("饼图", "label_pie.png"),
     ("柱图", "label_avg_spend.png"),
@@ -44,6 +45,7 @@ CHARTS = [
     ("TOP10 销售额", "top_revenue.png"),
     ("单价分布", "price_distribution.png"),
     ("周热力图", "weekday_hour_heatmap.png"),
+    ("年月分布", "month_heatmap.png"),
 ]
 
 
@@ -136,7 +138,7 @@ class AIDialog(ctk.CTkToplevel):
 
         self.source_var = ctk.StringVar(value="all8")
         ctk.CTkRadioButton(
-            source_frame, text="一键分析项目 8 张图（顺序逐张解读）",
+            source_frame, text="一键分析项目 9 张图（顺序逐张解读）",
             variable=self.source_var, value="all8",
             font=("SimHei", 11),
         ).pack(anchor="w", padx=15, pady=(10, 4))
@@ -274,8 +276,8 @@ class AIDialog(ctk.CTkToplevel):
             ]
             if not images:
                 messagebox.showwarning(
-                    "8 张图未生成",
-                    "请先在【图表总览】点【一键生成所有 8 张图】。",
+                    "9 张图未生成",
+                    "请先在【图表总览】点【一键生成所有 9 张图】。",
                 )
                 return
         else:
@@ -294,7 +296,7 @@ class AIDialog(ctk.CTkToplevel):
             from openai import OpenAI
             client = OpenAI(api_key=api_key, base_url=base_url)
         except Exception as e:
-            messagebox.showerror("初始化失败", f"无法创建 OpenAI client：\n{e}")
+            show_friendly_error("初始化失败", e, "连接 AI 服务", parent=self)
             return
 
         # 逐张调 API
@@ -321,7 +323,7 @@ class AIDialog(ctk.CTkToplevel):
                 )
                 content = response.choices[0].message.content
             except Exception as e:
-                content = f"[调用失败] {type(e).__name__}: {e}"
+                content = friendly_error_message(e, action=f"解读图表“{name}”")
 
             self.result_text.insert(
                 "end", f"\n{'=' * 60}\n【{name}】\n{'=' * 60}\n\n{content}\n"
@@ -353,6 +355,6 @@ class AIDialog(ctk.CTkToplevel):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
         except Exception as e:
-            messagebox.showerror("保存失败", str(e))
+            show_friendly_error("保存失败", e, "保存 AI 解读结果", parent=self)
             return
         messagebox.showinfo("已导出", f"已保存到：\n{path}")

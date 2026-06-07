@@ -11,6 +11,8 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from data_handlers.data_cleaner import DataCleaner
+from gui.clean_dialog import CATEGORIES, steps_in_category, CleanStepDialog
+from gui.error_messages import show_friendly_error
 from gui.pages.base_page import BasePage
 from gui.widgets import (
     BORDER_WIDTH,
@@ -22,36 +24,48 @@ from gui.widgets import (
 )
 
 
-CLEAN_STEPS = [
-    ("1", "删 CustomerID 缺失", "drop_missing_customer_id"),
-    ("2", "删取消订单", "drop_cancellations"),
-    ("3", "删非产品代码", "drop_non_product_codes"),
-    ("4", "时间转换", "convert_date"),
-    ("5", "加 TotalPrice", "add_total_price"),
-]
+CLEANING_GUIDE = """一、这里不是固定清洗流水线
 
-CLEAN_STEP_DETAILS = {
-    "drop_missing_customer_id": (
-        "删 CustomerID 缺失",
-        "删除无法识别客户的交易记录，保证后续可以按 CustomerID 做 RFM 聚合。",
-    ),
-    "drop_cancellations": (
-        "删取消订单",
-        "删除 C 开头的取消订单，并同步剔除与其匹配的原始正向订单。",
-    ),
-    "drop_non_product_codes": (
-        "删非产品代码",
-        "过滤 POST、DOT、C2、M、BANK CHARGES 等非真实商品记录。",
-    ),
-    "convert_date": (
-        "时间转换",
-        "将 InvoiceDate 转换为 datetime，供月度趋势、小时热力图和 Recency 计算使用。",
-    ),
-    "add_total_price": (
-        "加 TotalPrice",
-        "新增 TotalPrice = Quantity × UnitPrice，供销售额、RFM-M 和商品销售额分析使用。",
-    ),
-}
+页面上的「删除行工具」「类型转换工具」「整理 / 派生工具」是三类工具入口，
+不是必须从左到右执行的快捷流程，也不是点一次就会完成整套清洗。
+
+每次点击一个分类后，需要在弹窗顶部选择具体操作，再选择它作用的列和参数。
+操作会累积应用在当前数据上；你可以按数据实际情况自由组合、重复使用或跳过。
+
+
+二、如何决定使用哪些工具
+
+先观察表格的列名、样例值和数据含义，再按问题选择工具：
+
+· 完全重复的记录：使用「删除行工具 → 删重复行」。
+· 客户、订单或日期等关键列为空：使用「删空值行」，并只选择需要检查的列。
+· 取消订单或特定状态：使用「按文本条件删行」。
+· 数量、单价小于等于 0：使用「按数值条件删行」。
+· 数字带货币符号、逗号或空格：使用「类型转换工具 → 列转数值」。
+· 日期还是普通文本或数字：使用「列转日期」。
+· 文本大小写、空格不统一：使用「整理 / 派生工具 → 文本规整」。
+· 没有销售额列：使用「派生新列」，计算 数量 × 单价。
+
+
+三、推荐但不强制的检查顺序
+
+1. 先看关键字段是否存在，并理解每一列代表什么。
+2. 处理重复记录和关键字段空值。
+3. 把数量、单价、日期转换成正确类型。
+4. 按业务含义处理取消单、退货和异常值。
+5. 需要时派生销售额等新列。
+6. 查看当前清洗日志，确认删除量符合预期，再进入字段映射。
+
+这只是便于检查的建议顺序。不同数据表问题不同，不应机械执行全部工具。
+
+
+四、撤销、重置与安全性
+
+· 每次有效清洗操作前都会保存快照，可以点击「撤销上一步」。
+· 「重置」会回到当前文件刚加载时的原始数据，清空本文件的清洗结果。
+· 清洗在内存副本上进行，不会直接修改磁盘里的 CSV 或 Excel 文件。
+· 每次操作后请查看行数变化和日志；删除数量异常时应先撤销并检查参数。
+"""
 
 
 class CleanerPage(BasePage):
@@ -143,10 +157,22 @@ class CleanerPage(BasePage):
 
         ctk.CTkButton(
             buttons,
-            text="一键全清洗",
-            command=self._on_clean_all,
+            text="清洗说明",
+            command=self._show_cleaning_guide,
             fg_color=COLORS["blue"],
             hover_color=COLORS["blue_hover"],
+            font=("SimHei", 12, "bold"),
+            height=36,
+            width=96,
+            corner_radius=6,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            buttons,
+            text="↩ 撤销上一步",
+            command=self._on_undo,
+            fg_color=COLORS["amber"],
+            hover_color=COLORS.get("amber_hover", COLORS["amber"]),
             font=("SimHei", 12, "bold"),
             height=36,
             width=120,
@@ -165,26 +191,41 @@ class CleanerPage(BasePage):
             corner_radius=6,
         ).pack(side="left")
 
-        step_frame = ctk.CTkFrame(panel, fg_color=COLORS["panel_soft"], corner_radius=8)
-        step_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 16))
-        for col in range(5):
-            step_frame.grid_columnconfigure(col, weight=1, uniform="clean_step")
+        ctk.CTkLabel(
+            panel,
+            text=(
+                "工具分类（不是固定流水线）：下面每个按钮代表一类可选工具。"
+                "点击后再选择具体操作、作用列和参数，可按数据问题自由组合或跳过。"
+            ),
+            font=("SimHei", 11, "bold"),
+            fg_color=COLORS["amber_soft"],
+            text_color=COLORS["amber"],
+            anchor="w",
+            justify="left",
+            wraplength=940,
+            corner_radius=6,
+        ).grid(row=2, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 8), ipady=7)
 
-        for col, (number, text, method_name) in enumerate(CLEAN_STEPS):
+        step_frame = ctk.CTkFrame(panel, fg_color=COLORS["panel_soft"], corner_radius=8)
+        step_frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 16))
+        for col in range(len(CATEGORIES)):
+            step_frame.grid_columnconfigure(col, weight=1, uniform="clean_cat")
+
+        for idx, cat in enumerate(CATEGORIES):
             btn = ctk.CTkButton(
                 step_frame,
-                text=f"{number}. {text}",
-                command=lambda m=method_name: self._run_step(m),
+                text=cat["name"] + "工具 …",
+                command=lambda c=cat: self._on_category(c),
                 fg_color="#ffffff",
                 hover_color=COLORS["blue_soft"],
                 text_color=COLORS["text"],
                 border_color=COLORS["border"],
                 border_width=BORDER_WIDTH,
-                font=("SimHei", 11, "bold"),
-                height=34,
+                font=("SimHei", 12, "bold"),
+                height=40,
                 corner_radius=6,
             )
-            btn.grid(row=0, column=col, sticky="ew", padx=6, pady=10)
+            btn.grid(row=0, column=idx, sticky="ew", padx=6, pady=10)
 
     def _build_log_panels(self, parent):
         logs = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
@@ -243,6 +284,27 @@ class CleanerPage(BasePage):
         """进入本页时刷新提示、指标和日志。"""
         super().on_show()
         self._refresh_display()
+        self._maybe_show_cleaning_guide()
+
+    def _maybe_show_cleaning_guide(self):
+        """每份已加载数据第一次进入清洗页时自动展示一次说明。"""
+        if (
+            self.app.loader is not None
+            and self.app.loader.df is not None
+            and not self.app.cleaning_intro_seen
+        ):
+            self.app.cleaning_intro_seen = True
+            self._show_cleaning_guide()
+
+    def _show_cleaning_guide(self):
+        """打开可重复查看的清洗工具箱说明页。"""
+        from gui.intro_dialog import IntroDialog
+
+        IntroDialog(
+            self,
+            title="数据清洗工具箱使用说明",
+            body=CLEANING_GUIDE,
+        )
 
     def _ensure_loader(self):
         """检查数据已加载。"""
@@ -250,33 +312,6 @@ class CleanerPage(BasePage):
             messagebox.showwarning("数据未加载", "请先在【加载数据】页加载 CSV 文件。")
             return False
         return True
-
-    def _on_clean_all(self):
-        """一键全清洗。"""
-        if not self._ensure_loader():
-            return
-        previous_log = self._current_cleaning_log()
-        try:
-            cleaner = DataCleaner(self.app.loader.df)
-            if previous_log:
-                cleaner.log.append("【保留记录】一键全清洗前，本文件已经执行过以下分步操作：")
-                cleaner.log.extend(previous_log)
-                cleaner.log.append("【一键全清洗】从原始数据重新执行标准 5 步流程，下面是本次结果：")
-            else:
-                cleaner.log.append("【一键全清洗】从原始数据执行标准 5 步流程。")
-
-            for _, _, method_name in CLEAN_STEPS:
-                self._run_clean_method(cleaner, method_name)
-            cleaner.log.append("=== 全部清洗步骤完成 ===")
-        except Exception as e:
-            messagebox.showerror("清洗失败", f"执行清洗时出错：\n{e}")
-            return
-        self.app.cleaner = cleaner
-        self.app.rfm_analyzer = None
-        self.app.rfm_df = None
-        reset_chart_progress(self.app)
-        self._refresh_display()
-        self.app.set_status(f"已完成全部清洗：{len(cleaner.df)} 行")
 
     def _on_reset(self):
         """重置：重新创建 DataCleaner，并清空下游 RFM 状态。"""
@@ -289,38 +324,49 @@ class CleanerPage(BasePage):
         self._refresh_display()
         self.app.set_status("已重置：cleaner + RFM 结果都清空，回到未清洗状态")
 
-    def _run_step(self, method_name):
-        """运行单个清洗步骤。"""
-        if not self._ensure_loader():
+    def _on_undo(self):
+        """撤销上一步清洗：弹出最近快照，恢复到那一步之前（累积式工具箱核心）。"""
+        if self.app.cleaner is None or not self.app.cleaner.can_undo:
+            messagebox.showinfo("无法撤销", "当前没有可撤销的清洗步骤。")
             return
-        if self.app.cleaner is None:
-            self.app.cleaner = DataCleaner(self.app.loader.df)
-        try:
-            self._run_clean_method(self.app.cleaner, method_name)
-        except Exception as e:
-            messagebox.showerror("步骤失败", f"执行 {method_name} 时出错：\n{e}")
-            return
+        before = len(self.app.cleaner.df)
+        self.app.cleaner.undo()
+        after = len(self.app.cleaner.df)
+        # 撤销改变了数据，下游 RFM 与图表进度一并失效
         self.app.rfm_analyzer = None
         self.app.rfm_df = None
         reset_chart_progress(self.app)
         self._refresh_display()
-        self.app.set_status(f"已执行：{method_name}，当前 {len(self.app.cleaner.df)} 行")
+        self.app.set_status(f"已撤销上一步：{before:,} → {after:,} 行")
 
-    def _run_clean_method(self, cleaner, method_name):
-        """给独立清洗函数补 GUI 层步骤说明，再执行原函数。"""
-        title, detail = CLEAN_STEP_DETAILS[method_name]
-        before = len(cleaner.df) if cleaner.df is not None else 0
-        cleaner.log.append(f"【步骤】{title}")
-        cleaner.log.append(f"说明：{detail}")
-        method = getattr(cleaner, method_name)
-        method()
-        after = len(cleaner.df) if cleaner.df is not None else 0
-        cleaner.log.append(f"结果：{before:,} → {after:,}，变化 {before - after:,} 行")
+    def _on_category(self, cat):
+        """点一个大类按钮：弹该类的参数对话框（顶部下拉选具体操作，再填参数）。"""
+        if not self._ensure_loader():
+            return
+        if self.app.cleaner is None:
+            self.app.cleaner = DataCleaner(self.app.loader.df)
+        steps = steps_in_category(cat)
+        # 对话框基于「当前」数据的列与取值（可能已清洗几步），让用户照当前状态选
+        CleanStepDialog(self, self.app.cleaner.df, steps, cat["name"],
+                        on_submit=self._execute_step)
 
-    def _current_cleaning_log(self):
-        if self.app.cleaner is None or not self.app.cleaner.log:
-            return []
-        return list(self.app.cleaner.log)
+    def _execute_step(self, method_name, kwargs):
+        """在当前 cleaner 上执行一把通用刀（累积式，每刀内部已拍快照，可撤销）。"""
+        cleaner = self.app.cleaner
+        if cleaner is None:
+            return
+        before = cleaner.row_count
+        try:
+            getattr(cleaner, method_name)(**kwargs)
+        except Exception as e:
+            show_friendly_error("清洗失败", e, "执行所选清洗工具", parent=self)
+            return
+        after = cleaner.row_count
+        self.app.rfm_analyzer = None
+        self.app.rfm_df = None
+        reset_chart_progress(self.app)
+        self._refresh_display()
+        self.app.set_status(f"已执行 {method_name}：{before:,} → {after:,} 行")
 
     def _refresh_display(self):
         """更新指标、导航和日志显示。"""
@@ -343,7 +389,10 @@ class CleanerPage(BasePage):
             raw_rows = len(loader_df)
             current_rows = len(cleaner_df)
             removed_rows = raw_rows - current_rows
-            state = "已清洗" if "TotalPrice" in cleaner_df.columns else "进行中"
+            # 方案 B：清洗页只管清洗，不再以 TotalPrice 判定「完成」。
+            # 做过至少一步清洗（有日志/可撤销）显示「已清洗」，否则「就绪」。
+            did_clean = bool(getattr(self.app.cleaner, "log", None)) or self.app.cleaner.can_undo
+            state = "已清洗" if did_clean else "就绪"
             self.info_var.set(f"当前数据状态：原始 {raw_rows} 行 → 当前 {current_rows} 行")
 
         self._set_metric("raw", self._fmt_number(raw_rows), "导入数据")

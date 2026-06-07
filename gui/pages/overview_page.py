@@ -12,8 +12,13 @@ from analyzer.product_analysis import (
     get_top_quantity,
     get_top_revenue,
 )
-from analyzer.sales_trend import get_monthly_sales, get_weekday_hour_orders
+from analyzer.sales_trend import (
+    get_monthly_sales,
+    get_weekday_hour_orders,
+    get_month_orders,
+)
 from visualization.visualizer import Visualizer
+from gui.error_messages import show_friendly_error
 from gui.pages.base_page import BasePage
 from gui.widgets import (
     BORDER_WIDTH,
@@ -38,7 +43,8 @@ CHARTS = [
     ("TOP10 销量", "top_quantity.png", "TOP10 热销商品", "回答：哪些商品最走量，适合做引流或补货关注。"),
     ("TOP10 销售额", "top_revenue.png", "TOP10 高销售额商品", "回答：哪些商品贡献最高营收。"),
     ("单价分布", "price_distribution.png", "成交单价分布", "回答：商品价格带集中在哪里，是否存在长尾。"),
-    ("周热力图", "weekday_hour_heatmap.png", "订单数热力图", "回答：订单集中在星期几和哪个小时段。"),
+    ("周热力图", "weekday_hour_heatmap.png", "订单数热力图（星期×小时）", "回答：订单集中在星期几和哪个小时段。"),
+    ("年月分布", "month_heatmap.png", "各年各月订单分布", "回答：不同年份各月的订单分布、跨年同月对比与季节性。"),
 ]
 
 
@@ -165,7 +171,7 @@ class OverviewPage(BasePage):
 
         ctk.CTkLabel(
             panel,
-            text="一键生成 8 张图后，可在右侧目录逐张查看、导出或交给 AI 解读。",
+            text="一键生成 9 张图后，可在右侧目录逐张查看、导出或交给 AI 解读。",
             font=("SimHei", 11),
             text_color=COLORS["muted"],
             anchor="w",
@@ -350,11 +356,21 @@ class OverviewPage(BasePage):
         self._refresh_nav_state()
 
     def _ensure_data(self):
-        """检查 cleaner（含 TotalPrice）+ rfm_df（含 Label）齐备。"""
-        if self.app.cleaner is None or self.app.cleaner.df is None or "TotalPrice" not in self.app.cleaner.df.columns:
+        """检查 cleaner + 字段映射 + rfm_df（含 Label）齐备。"""
+        if self.app.cleaner is None or self.app.cleaner.df is None:
+            messagebox.showwarning("数据未准备", "请先在【数据清洗】完成清洗。")
+            return False
+        if not self.app.is_mapped():
+            # 未映射 → 弹字段映射对话框；用户确认后再点一次按钮
+            self.app.open_field_mapping()
+            return False
+        missing = self.app.missing_fields_for("overview")
+        if missing:
+            from data_handlers.field_mapping import FIELD_CN
+            names = "、".join(FIELD_CN.get(c, c) for c in missing)
             messagebox.showwarning(
-                "数据未准备",
-                "请先在【数据清洗】点【一键全清洗】（需要 TotalPrice 列）。",
+                "字段不足",
+                f"「图表总览」要生成全部图表还需要：{names}\n请点顶部「⚙ 字段映射」补上对应列。",
             )
             return False
         if self.app.rfm_df is None or "Label" not in self.app.rfm_df.columns:
@@ -371,11 +387,11 @@ class OverviewPage(BasePage):
         return self.app.visualizer
 
     def _on_generate_all(self):
-        """一键生成全部 8 张图表（保存到 output/ 目录）并刷新状态与预览。"""
+        """一键生成全部 9 张图表（保存到 output/ 目录）并刷新状态与预览。"""
         if not self._ensure_data():
             return
         viz = self._get_visualizer()
-        df = self.app.cleaner.df
+        df = self.app.get_active_df()
         rfm = self.app.rfm_df
         try:
             viz.plot_label_pie(rfm)
@@ -386,8 +402,9 @@ class OverviewPage(BasePage):
             viz.plot_top_revenue(get_top_revenue(df))
             viz.plot_price_distribution(get_price_distribution(df))
             viz.plot_weekday_hour_heatmap(get_weekday_hour_orders(df))
+            viz.plot_month_heatmap(get_month_orders(df))
         except Exception as e:
-            messagebox.showerror("生成失败", f"生成过程中出错：\n{e}")
+            show_friendly_error("生成失败", e, "生成全部分析图表", parent=self)
             return
         mark_chart_progress(self.app, "sales", SALES_CHART_KEYS)
         mark_chart_progress(self.app, "product", PRODUCT_CHART_KEYS)
@@ -395,7 +412,7 @@ class OverviewPage(BasePage):
         self._refresh_chart_status()
         self._refresh_nav_state()
         self._show_chart(0)
-        self.app.set_status("8 张图全部生成完成（output/ 目录）")
+        self.app.set_status(f"{len(CHARTS)} 张图全部生成完成（output/ 目录）")
 
     def _show_chart(self, index):
         name, fname, title, explanation = CHARTS[index]
@@ -415,7 +432,7 @@ class OverviewPage(BasePage):
                 size=img.size,
             )
         except Exception as e:
-            messagebox.showerror("加载失败", f"无法加载 {path}：\n{e}")
+            show_friendly_error("加载失败", e, "打开所选图表", parent=self)
             return
 
         self.image_label.configure(image=ctk_img, text="")
@@ -450,7 +467,7 @@ class OverviewPage(BasePage):
         try:
             shutil.copy(src, dst)
         except Exception as e:
-            messagebox.showerror("导出失败", str(e))
+            show_friendly_error("导出失败", e, "导出所选图表", parent=self)
             return
         self.app.set_status(f"已导出 {name} → {dst}")
         messagebox.showinfo("导出成功", f"图已保存到：\n{dst}")
@@ -488,7 +505,7 @@ class OverviewPage(BasePage):
             if index < len(self.chart_buttons):
                 self.chart_buttons[index].set_generated(generated, selected=selected)
 
-        self._set_metric("generated", f"{generated_count}/8", "output 目录")
+        self._set_metric("generated", f"{generated_count}/{len(CHARTS)}", "output 目录")
         if self.current_index >= 0:
             self._set_metric("selected", CHARTS[self.current_index][0], "当前预览")
         else:

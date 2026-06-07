@@ -13,6 +13,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 from data_handlers.file_loader import FileLoader
+from gui.error_messages import show_friendly_error
 from gui.pages.base_page import BasePage
 from gui.widgets import (
     BORDER_WIDTH,
@@ -68,7 +69,11 @@ class ValidationRow(ctk.CTkFrame):
     def set_state(self, state):
         if state == "ok":
             self.status_label.configure(
-                text="通过", fg_color=COLORS["green_soft"], text_color=COLORS["green"]
+                text="自动识别", fg_color=COLORS["green_soft"], text_color=COLORS["green"]
+            )
+        elif state == "to_map":
+            self.status_label.configure(
+                text="待映射", fg_color=COLORS["amber_soft"], text_color=COLORS["amber"]
             )
         elif state == "missing_required":
             self.status_label.configure(
@@ -97,7 +102,7 @@ class LoadPage(BasePage):
         )
 
         self.file_path_var = ctk.StringVar(value="尚未选择文件")
-        self.file_hint_var = ctk.StringVar(value="支持 .csv / .xlsx，列名会自动做基础归一化。")
+        self.file_hint_var = ctk.StringVar(value="支持 .csv / .xlsx，导入后直接进入清洗；进入分析时再做字段映射。")
         self.load_state_var = ctk.StringVar(value="等待导入")
         self.preview_title_var = ctk.StringVar(value="数据预览（等待导入）")
         self.metric_vars = {}
@@ -159,7 +164,7 @@ class LoadPage(BasePage):
 
         ctk.CTkLabel(
             parent,
-            text="选择 Online Retail 数据文件，系统会读取数据并检查分析所需字段。",
+            text="选择任意商家的交易表（.csv / .xlsx），导入后保留原始列名直接清洗；进入分析时再把列映射到标准字段。",
             font=("SimHei", 11),
             text_color=COLORS["muted"],
             anchor="w",
@@ -221,7 +226,7 @@ class LoadPage(BasePage):
     def _build_validation_panel(self, parent):
         ctk.CTkLabel(
             parent,
-            text="字段校验",
+            text="字段识别预览",
             font=("SimHei", 15, "bold"),
             text_color=COLORS["text"],
             anchor="w",
@@ -229,7 +234,7 @@ class LoadPage(BasePage):
 
         ctk.CTkLabel(
             parent,
-            text="必需字段缺失会影响后续清洗、RFM 和图表生成。",
+            text="下面是按列名自动识别的结果。「待映射」不影响清洗，进入分析时手动指认即可。",
             font=("SimHei", 10),
             text_color=COLORS["muted"],
             anchor="w",
@@ -303,7 +308,9 @@ class LoadPage(BasePage):
             summary,
             text=(
                 "加载成功后会自动清空旧的清洗结果和 RFM 结果，避免不同数据文件之间互相污染。"
-                "字段别名如 Invoice、Price、Customer ID 会被自动统一为标准列名。"
+                "本系统保留你表格的原始列名直接清洗；进入分析（RFM / 销售 / 商品 / 总览）时，"
+                "会弹出字段映射窗口、自动猜好列对应（如「会员卡号」→ CustomerID），猜错可手动调整——"
+                "因此不同商家、不同列名的交易表都能分析。"
             ),
             font=("SimHei", 12),
             text_color=COLORS["text"],
@@ -344,7 +351,7 @@ class LoadPage(BasePage):
         self._show_empty_preview("选择文件后将在这里显示前 10 行数据。")
 
     def _on_select_file(self):
-        """选文件 → 加载 → 字段检查 → 刷新指标与预览。"""
+        """选文件 → 读入原始列 → 直接进入清洗（方案 B：字段映射推迟到分析入口）。"""
         path = filedialog.askopenfilename(
             title="选择数据文件",
             filetypes=[
@@ -359,24 +366,24 @@ class LoadPage(BasePage):
         self.file_path_var.set(path)
         self._enter_loading_state(path)
 
+        # 只把文件读进来——保留原始列名，不在此改名、不弹映射。
         try:
             loader = FileLoader(path)
             loader.load_file()
-            loader.check_columns()
         except Exception as e:
-            self._mark_validation_failure(loader if "loader" in locals() else None)
             self._clear_loaded_state()
             self.load_state_var.set("导入失败")
-            self.file_hint_var.set("请检查文件格式或字段是否符合要求。")
-            messagebox.showerror("加载失败", f"无法加载文件：\n{e}")
+            self.file_hint_var.set("请按错误提示检查文件，再重新选择。")
+            show_friendly_error("加载失败", e, "读取数据文件", parent=self)
             return
 
+        # 写入 app 并刷新主界面；字段映射在进入分析页时再做。
         self._reset_downstream_state()
         self.app.loader = loader
         self._refresh_loaded_state(loader)
         self._refresh_nav_state()
         self.app.set_status(
-            f"已加载: {path}（{len(loader.df)} 行，{len(loader.df.columns)} 列）"
+            f"已加载: {loader.file_path}（{len(loader.df)} 行，{len(loader.df.columns)} 列）"
         )
 
     def on_show(self):
@@ -390,7 +397,7 @@ class LoadPage(BasePage):
 
         self.load_state_var.set("导入成功")
         self.file_path_var.set(str(path))
-        self.file_hint_var.set("字段校验已完成，可以进入下一步「数据清洗」。")
+        self.file_hint_var.set("已读入原始列，可以进入「数据清洗」；进入分析时再做字段映射。")
 
         self._set_metric("rows", f"{len(df):,}", "原始交易记录")
         self._set_metric("columns", f"{len(df.columns):,}", "已识别字段")
@@ -402,12 +409,19 @@ class LoadPage(BasePage):
         self._render_preview(df.head(10))
 
     def _refresh_validation(self, loader):
-        columns = set(loader.df.columns)
+        """按列名自动识别每个标准字段对应哪一列，给映射前的预览。
+
+        方案 B：这里不再「校验」是否缺列（缺列也能正常清洗），而是展示自动识别结果——
+        识别到 → 绿「自动识别」；没识别到 → 必需字段标黄「待映射」，可选字段标「可选缺失」。
+        真正的指认在进入分析页时的字段映射对话框里完成。
+        """
+        from data_handlers.field_mapping import guess_mapping
+        guess = guess_mapping(loader.df.columns)
         for column in REQUIRED_COLUMNS:
-            state = "ok" if column in columns else "missing_required"
+            state = "ok" if guess.get(column) else "to_map"
             self.validation_rows[column].set_state(state)
         for column in OPTIONAL_COLUMNS:
-            state = "ok" if column in columns else "missing_optional"
+            state = "ok" if guess.get(column) else "missing_optional"
             self.validation_rows[column].set_state(state)
 
     def _mark_validation_failure(self, loader):
@@ -435,11 +449,17 @@ class LoadPage(BasePage):
         self.table.pack(fill="both", expand=True, padx=2, pady=2)
 
     def _reset_downstream_state(self):
+        """换文件前清空所有依赖旧数据集的状态，包括全局筛选。"""
         self._archive_current_cleaning_log()
         self.app.cleaner = None
         self.app.rfm_analyzer = None
         self.app.rfm_df = None
         self.app.visualizer = None
+        self.app.reset_data_filter()
+        # 方案 B：换文件后旧映射作废（新表列名可能完全不同），进入分析时重新映射
+        self.app.field_mapping = None
+        self.app.mapping_intro_seen = False
+        self.app.cleaning_intro_seen = False
         reset_chart_progress(self.app)
 
     def _clear_loaded_state(self):

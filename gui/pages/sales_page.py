@@ -5,8 +5,18 @@ from tkinter import messagebox
 import customtkinter as ctk
 from PIL import Image
 
-from analyzer.sales_trend import get_monthly_sales, get_weekday_hour_orders
+from analyzer.sales_trend import (
+    get_monthly_sales,
+    get_weekday_hour_orders,
+    get_month_orders,
+)
+from analyzer.insights import (
+    monthly_trend_insight,
+    weekday_hour_insight,
+    month_insight,
+)
 from visualization.visualizer import Visualizer
+from gui.error_messages import show_friendly_error
 from gui.pages.base_page import BasePage
 from gui.widgets import (
     BORDER_WIDTH,
@@ -21,18 +31,7 @@ from gui.widgets import (
 CHART_BOX_SIZE = (720, 520)
 
 INSIGHTS = {
-    "empty": "选择上方图表后，这里会显示对应的业务洞察。",
-    "monthly_trend": (
-        "• 销售额从 2010-12 起波动上升，9-11 月明显爬升至全年峰值\n"
-        "• 11 月峰值约 ￡1,150,000，对应西方圣诞季备货高峰\n"
-        "• 12 月数据截至 2011-12-09 未完整，图中已切掉残月"
-    ),
-    "weekday_hour_heatmap": (
-        "• 全周订单峰值：周三 12 点 604 单 / 次峰：周四 12 点 580 单\n"
-        "• 周六完全不营业，凌晨 0-6 点和深夜 21-23 点基本无订单\n"
-        "• 周四 17-20 点异常活跃，适合重点观察促销或运营安排\n"
-        "• 用订单数而非销售额，避免大额订单对时段判断造成偏差"
-    ),
+    "empty": "选择上方图表后，这里会显示对应的业务洞察（按当前数据现算）。",
 }
 
 
@@ -146,6 +145,18 @@ class SalesPage(BasePage):
             height=36,
             width=110,
             corner_radius=6,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            buttons,
+            text="年月分布",
+            command=self._on_month,
+            fg_color=COLORS["blue"],
+            hover_color=COLORS["blue_hover"],
+            font=("SimHei", 12, "bold"),
+            height=36,
+            width=120,
+            corner_radius=6,
         ).pack(side="left")
 
     def _build_analysis_area(self, parent):
@@ -229,12 +240,21 @@ class SalesPage(BasePage):
         self._refresh_nav_state()
 
     def _ensure_cleaner(self):
-        """检查清洗完整。"""
+        """检查清洗 + 字段映射就绪（方案 B：分析前需先把列映射到标准字段）。"""
         if self.app.cleaner is None or self.app.cleaner.df is None:
             messagebox.showwarning("尚未清洗数据", "请先在【数据清洗】执行清洗。")
             return False
-        if "TotalPrice" not in self.app.cleaner.df.columns:
-            messagebox.showwarning("清洗不完整", "销售分析需要 TotalPrice 列。")
+        if not self.app.is_mapped():
+            self.app.open_field_mapping()
+            return False
+        missing = self.app.missing_fields_for("sales")
+        if missing:
+            from data_handlers.field_mapping import FIELD_CN
+            names = "、".join(FIELD_CN.get(c, c) for c in missing)
+            messagebox.showwarning(
+                "字段不足",
+                f"「销售分析」还需要这些字段：{names}\n请点顶部「⚙ 字段映射」补上对应列。",
+            )
             return False
         return True
 
@@ -248,14 +268,14 @@ class SalesPage(BasePage):
         if not self._ensure_cleaner():
             return
         try:
-            monthly = get_monthly_sales(self.app.cleaner.df)
+            monthly = get_monthly_sales(self.app.get_active_df())
             path = self._get_visualizer().plot_monthly_trend(monthly)
         except Exception as e:
-            messagebox.showerror("生成失败", f"生成月度趋势图时出错：\n{e}")
+            show_friendly_error("生成失败", e, "生成月度趋势图", parent=self)
             return
         self.chart_title_var.set("月度销售趋势")
         self._show_image(path)
-        self.insight_var.set(INSIGHTS["monthly_trend"])
+        self.insight_var.set(monthly_trend_insight(monthly))
         mark_chart_progress(self.app, "sales", "monthly_trend")
         self._refresh_nav_state()
         self.app.set_status(f"已生成：{path}")
@@ -265,25 +285,48 @@ class SalesPage(BasePage):
         if not self._ensure_cleaner():
             return
         try:
-            pivot = get_weekday_hour_orders(self.app.cleaner.df)
+            pivot = get_weekday_hour_orders(self.app.get_active_df())
             path = self._get_visualizer().plot_weekday_hour_heatmap(pivot)
         except Exception as e:
-            messagebox.showerror("生成失败", f"生成周热力图时出错：\n{e}")
+            show_friendly_error("生成失败", e, "生成星期与小时热力图", parent=self)
             return
         self.chart_title_var.set("订单数热力图（星期 × 小时）")
         self._show_image(path)
-        self.insight_var.set(INSIGHTS["weekday_hour_heatmap"])
+        self.insight_var.set(weekday_hour_insight(pivot))
         mark_chart_progress(self.app, "sales", "weekday_hour_heatmap")
         self._refresh_nav_state()
         self.app.set_status(f"已生成：{path}")
 
+    def _on_month(self):
+        """生成「各月份订单数分布（季节性）」并展示——多年合并看 12 个月旺淡季。"""
+        if not self._ensure_cleaner():
+            return
+        try:
+            pivot = get_month_orders(self.app.get_active_df())
+            path = self._get_visualizer().plot_month_heatmap(pivot)
+        except Exception as e:
+            show_friendly_error("生成失败", e, "生成年月订单分布图", parent=self)
+            return
+        self.chart_title_var.set("各年各月订单数分布")
+        self._show_image(path)
+        self.insight_var.set(month_insight(pivot))
+        mark_chart_progress(self.app, "sales", "month_heatmap")
+        self._refresh_nav_state()
+        self.app.set_status(f"已生成：{path}")
+
     def _refresh_metrics(self):
-        if self.app.cleaner is None or self.app.cleaner.df is None or "TotalPrice" not in self.app.cleaner.df.columns:
+        # 方案 B + 软门禁：未映射 / 缺销售所需列时，显示提示而不取数（避免 KeyError）
+        if not self.app.is_mapped():
+            note = "等待清洗" if self.app.cleaner is None else "等待映射"
             for key in self.metric_vars:
-                self._set_metric(key, "--", "等待清洗")
+                self._set_metric(key, "--", note)
+            return
+        if self.app.missing_fields_for("sales"):
+            for key in self.metric_vars:
+                self._set_metric(key, "--", "缺字段")
             return
 
-        df = self.app.cleaner.df
+        df = self.app.get_active_df()
         total_sales = float(df["TotalPrice"].sum())
         orders = df["InvoiceNo"].nunique()
         months = df["InvoiceDate"].dt.strftime("%Y-%m").nunique()
@@ -309,7 +352,7 @@ class SalesPage(BasePage):
                 size=img.size,
             )
         except Exception as e:
-            messagebox.showerror("加载图片失败", f"无法加载 {path}：\n{e}")
+            show_friendly_error("加载图片失败", e, "打开生成的图表", parent=self)
             return
         self.image_label.configure(image=ctk_img, text="")
         self.current_image = ctk_img

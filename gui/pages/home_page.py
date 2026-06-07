@@ -14,7 +14,7 @@ STEPS = [
     ("03", "RFM 分群", "计算 R/F/M 并生成 8 类标签", "RFM 分析"),
     ("04", "销售分析", "月度趋势与订单热力图", "销售分析"),
     ("05", "商品分析", "销量、销售额、单价分布", "商品分析"),
-    ("06", "图表总览", "8 张图统一浏览 + AI 解读", "图表总览"),
+    ("06", "图表总览", "9 张图统一浏览 + AI 解读", "图表总览"),
 ]
 
 ALCHEMY_ROWS = [
@@ -889,24 +889,26 @@ class HomePage(ctk.CTkFrame):
 
     def _refresh_overview(self):
         loader_ok = self.app.loader is not None and self.app.loader.df is not None
-        cleaner_ok = (
-            self.app.cleaner is not None
-            and self.app.cleaner.df is not None
-            and "TotalPrice" in self.app.cleaner.df.columns
-        )
+        # 方案 B：清洗完成只看「有清洗后数据」；销售额/客户等需标准列的指标，
+        # 要等进入分析做完字段映射（mapped_ok）后才能算。
+        cleaner_ok = self.app.cleaner is not None and self.app.cleaner.df is not None
+        mapped_ok = self.app.is_mapped()
         rfm_ok = self.app.rfm_df is not None and "Label" in self.app.rfm_df.columns
         sales_done = cleaner_ok and chart_group_complete(self.app, "sales")
         product_done = cleaner_ok and chart_group_complete(self.app, "product")
         overview_done = cleaner_ok and rfm_ok and chart_group_complete(self.app, "overview")
 
+        # 映射后的清洗数据（标准列名），供销售额/客户/炼金炉取数；未映射为 None
+        mapped_df = self.app.mapped_clean_df()
+
         raw_rows = len(self.app.loader.df) if loader_ok else None
         clean_rows = len(self.app.cleaner.df) if cleaner_ok else None
-        customer_count = self._customer_count(cleaner_ok, rfm_ok)
-        total_sales = self._total_sales(cleaner_ok)
+        customer_count = self._customer_count(rfm_ok, mapped_df)
+        total_sales = self._total_sales(mapped_df)
         raw_accent, raw_soft = self._kpi_state_color(done=loader_ok, active=not loader_ok)
         clean_accent, clean_soft = self._kpi_state_color(done=cleaner_ok, active=loader_ok and not cleaner_ok)
         customer_accent, customer_soft = self._kpi_state_color(done=rfm_ok, active=cleaner_ok and not rfm_ok)
-        sales_accent, sales_soft = self._kpi_state_color(done=cleaner_ok, money=True)
+        sales_accent, sales_soft = self._kpi_state_color(done=mapped_ok, money=True)
 
         self._set_kpi(
             "raw",
@@ -924,19 +926,25 @@ class HomePage(ctk.CTkFrame):
             clean_accent,
             clean_soft,
         )
+        if rfm_ok:
+            customer_note = "RFM 客户"
+        elif mapped_ok:
+            customer_note = "清洗后客户"
+        else:
+            customer_note = "等待映射"
         self._set_kpi(
             "customer",
             self._fmt_number(customer_count),
-            "RFM 客户" if rfm_ok else "等待 RFM",
-            COLORS["green"] if rfm_ok else COLORS["muted"],
+            customer_note,
+            COLORS["green"] if (rfm_ok or mapped_ok) else COLORS["muted"],
             customer_accent,
             customer_soft,
         )
         self._set_kpi(
             "sales",
             self._fmt_money(total_sales),
-            "清洗后销售额" if cleaner_ok else "等待计算",
-            COLORS["amber"] if cleaner_ok else COLORS["muted"],
+            "清洗后销售额" if mapped_ok else "等待映射",
+            COLORS["amber"] if mapped_ok else COLORS["muted"],
             sales_accent,
             sales_soft,
         )
@@ -949,12 +957,12 @@ class HomePage(ctk.CTkFrame):
             product_done,
             overview_done,
         )
-        self._refresh_alchemy_panel(loader_ok, cleaner_ok)
+        self._refresh_alchemy_panel(loader_ok, cleaner_ok, mapped_df)
         self._refresh_star_panel(rfm_ok)
 
         if overview_done:
             self.summary_var.set("状态：完整流程已完成")
-            self.next_action_var.set("可以进入「图表总览」查看 8 张图并尝试 AI 解读。")
+            self.next_action_var.set("可以进入「图表总览」查看 9 张图并尝试 AI 解读。")
             self.next_page = "图表总览"
         elif rfm_ok and sales_done and product_done:
             self.summary_var.set("状态：图表分析待汇总")
@@ -978,7 +986,7 @@ class HomePage(ctk.CTkFrame):
             self.next_page = "数据清洗"
         else:
             self.summary_var.set("状态：等待加载数据")
-            self.next_action_var.set("先进入「加载数据」，选择 Online Retail 的 CSV 或 Excel 文件。")
+            self.next_action_var.set("先进入「加载数据」，选择任意商家交易表的 CSV 或 Excel 文件。")
             self.next_page = "加载数据"
 
     def _refresh_step_states(
@@ -1028,7 +1036,8 @@ class HomePage(ctk.CTkFrame):
             else:
                 card.set_state("未开始", COLORS["muted"], COLORS["panel_soft"])
 
-    def _refresh_alchemy_panel(self, loader_ok, cleaner_ok):
+    def _refresh_alchemy_panel(self, loader_ok, cleaner_ok, mapped_df):
+        """数据炼金炉面板：保留率看行数（无需映射），缺失/取消/非商品看标准列（需映射）。"""
         raw_df = self.app.loader.df if loader_ok else None
         cleaner_df = self.app.cleaner.df if cleaner_ok else None
         raw_rows = len(raw_df) if raw_df is not None else 0
@@ -1039,35 +1048,36 @@ class HomePage(ctk.CTkFrame):
             self.alchemy_gauge_value = 0
             self.alchemy_gauge_text = "--"
             self.alchemy_gauge_note_var.set("等待可分析数据")
-            stats = {
-                "missing": ("--", 0),
-                "cancel": ("--", 0),
-                "non_product": ("--", 0),
-            }
+            stats = {"missing": ("--", 0), "cancel": ("--", 0), "non_product": ("--", 0)}
         elif not cleaner_ok:
             self.alchemy_summary_var.set(f"等待清洗  原始 {raw_rows:,} 行")
             self.alchemy_gauge_value = 0
             self.alchemy_gauge_text = "--"
             self.alchemy_gauge_note_var.set("清洗后显示当前可分析数据")
-            stats = {
-                "missing": ("待清洗", 0),
-                "cancel": ("待清洗", 0),
-                "non_product": ("待清洗", 0),
-            }
+            stats = {"missing": ("待清洗", 0), "cancel": ("待清洗", 0), "non_product": ("待清洗", 0)}
         else:
-            missing = self._missing_customer_count(raw_df)
-            cancel = self._cancel_order_count(raw_df)
-            non_product = self._non_product_count(raw_df)
+            # 保留率：清洗后行数 / 原始行数（不依赖列名）
             retention = clean_rows / raw_rows if raw_rows else 0
             self.alchemy_summary_var.set(f"清洗完成  原始 {raw_rows:,} 行 -> 当前 {clean_rows or raw_rows:,} 行")
             self.alchemy_gauge_value = retention
             self.alchemy_gauge_text = f"{retention * 100:.1f}%"
             self.alchemy_gauge_note_var.set(f"当前可分析数据 {clean_rows:,} 行")
-            stats = {
-                "missing": (self._fmt_number(missing), self._ratio(missing, raw_rows)),
-                "cancel": (self._fmt_number(cancel), self._ratio(cancel, raw_rows)),
-                "non_product": (self._fmt_number(non_product), self._ratio(non_product, raw_rows)),
-            }
+
+            # 缺失客户 / 取消订单 / 非商品代码：需要标准列名，故用「映射后的原始数据」统计。
+            # 未映射时这三项显示「待映射」（进入分析做完字段映射后即点亮）。
+            if mapped_df is not None and raw_df is not None:
+                from data_handlers.field_mapping import apply_field_mapping
+                raw_mapped = apply_field_mapping(raw_df, self.app.field_mapping)
+                missing = self._missing_customer_count(raw_mapped)
+                cancel = self._cancel_order_count(raw_mapped)
+                non_product = self._non_product_count(raw_mapped)
+                stats = {
+                    "missing": (self._fmt_number(missing), self._ratio(missing, raw_rows)),
+                    "cancel": (self._fmt_number(cancel), self._ratio(cancel, raw_rows)),
+                    "non_product": (self._fmt_number(non_product), self._ratio(non_product, raw_rows)),
+                }
+            else:
+                stats = {"missing": ("待映射", 0), "cancel": ("待映射", 0), "non_product": ("待映射", 0)}
 
         for key, (text, value) in stats.items():
             self.alchemy_value_vars[key].set(text)
@@ -1327,16 +1337,16 @@ class HomePage(ctk.CTkFrame):
         product_mask = stock.str.match(r"^\d{5}[A-Za-z]?$", na=False)
         return int((~product_mask).sum())
 
-    def _customer_count(self, cleaner_ok, rfm_ok):
+    def _customer_count(self, rfm_ok, mapped_df):
         if rfm_ok:
             return len(self.app.rfm_df)
-        if cleaner_ok and "CustomerID" in self.app.cleaner.df.columns:
-            return self.app.cleaner.df["CustomerID"].nunique()
+        if mapped_df is not None and "CustomerID" in mapped_df.columns:
+            return mapped_df["CustomerID"].nunique()
         return None
 
-    def _total_sales(self, cleaner_ok):
-        if cleaner_ok:
-            return float(self.app.cleaner.df["TotalPrice"].sum())
+    def _total_sales(self, mapped_df):
+        if mapped_df is not None and "TotalPrice" in mapped_df.columns:
+            return float(mapped_df["TotalPrice"].sum())
         return None
 
     def _kpi_state_color(self, done=False, active=False, money=False):

@@ -11,7 +11,7 @@
 - **RFM 客户分群**：按最近消费（R）、消费频次（F）、消费金额（M）将客户划分为 8 类（重要价值、重要发展、一般保持……），识别高价值与流失客户。
 - **销售趋势分析**：月度销售趋势、周×小时订单热力图，刻画经营节奏。
 - **商品分析**：销量 / 销售额 TOP10 榜单、商品单价分布。
-- **可视化**：共 8 张图表（饼图 / 柱状图 / RFM 散点 / 趋势线 / TOP 榜 / 单价分布 / 热力图）。
+- **可视化**：共 9 张图表（饼图 / 柱状图 / RFM 散点 / 趋势线 / TOP 榜 / 单价分布 / 周时段热力图 / 年月热力图）。
 - **图形界面**：基于 customtkinter 的现代化桌面 GUI，主页仪表盘 + 6 大功能模块，引导式操作流程。
 - **AI 解读**：在「图表总览」页接入 OpenAI 兼容协议（支持 DeepSeek / Moonshot / 智谱等），对生成的图表与分析结果做自动化解读。
 
@@ -42,7 +42,7 @@ python main.py
 启动后进入主页仪表盘，按引导式流程依次操作：
 
 **加载数据 → 数据清洗 → RFM 分群 → 销售趋势 / 商品分析 → 图表总览**
-（在「图表总览」页生成 8 张图后，可对图表与分析结果调用 AI 解读）
+（在「图表总览」页生成 9 张图后，可对图表与分析结果调用 AI 解读）
 
 ## 项目结构
 
@@ -61,7 +61,7 @@ python main.py
 │   ├── sales_trend.py       #   销售趋势分析（月度 / 周×小时）
 │   └── product_analysis.py  #   商品分析（TOP 榜 / 单价分布）
 ├── visualization/
-│   └── visualizer.py        # Visualizer：8 张图表绘制与导出
+│   └── visualizer.py        # Visualizer：9 张图表绘制与导出
 ├── gui/                     # customtkinter 图形界面
 │   ├── window.py            #   主窗口 App
 │   ├── widgets.py           #   自定义组件与色板
@@ -90,7 +90,7 @@ python main.py
 | pandas | DataFrame 操作、清洗、RFM 计算 |
 | numpy | 数值计算（log 轴 bins、log10）|
 | openpyxl | 读取 `.xlsx` 文件（pandas 隐式依赖）|
-| matplotlib | 8 张图表的绘图引擎 |
+| matplotlib | 9 张图表的绘图引擎 |
 | seaborn | 周×小时热力图 |
 | pillow | 图片显示（缩略图、大图预览）|
 | customtkinter | 现代化 Tkinter UI（圆角、主题、统一字体）|
@@ -98,4 +98,9 @@ python main.py
 
 完整版本号见 [requirements.txt](requirements.txt)。
 
+## 作者
 
+- 姓名：鲁霄曈
+- 学号：25122027
+- 班级：信管2班
+- 专业：上海大学 信息管理专业

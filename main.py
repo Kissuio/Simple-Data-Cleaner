@@ -1,4 +1,4 @@
-"""项目主入口：启动 Tkinter GUI。直接运行：python main.py"""
+#begin with your data.
 
 from gui.window import run
 

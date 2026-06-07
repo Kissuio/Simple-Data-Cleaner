@@ -60,6 +60,7 @@ OVERVIEW_CHART_KEYS = {
     "top_revenue",
     "price_distribution",
     "weekday_hour_heatmap",
+    "month_heatmap",
 }
 
 REQUIRED_CHART_PROGRESS = {
@@ -279,6 +280,7 @@ def build_workflow_nav(parent, app, active_target, nav_items):
         anchor="w",
     ).grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 12))
 
+    last_row = 1
     for row, (number, title, target) in enumerate(NAV_STEPS, start=2):
         item = WorkflowNavItem(
             nav,
@@ -290,8 +292,30 @@ def build_workflow_nav(parent, app, active_target, nav_items):
         )
         item.grid(row=row, column=0, sticky="ew", padx=12, pady=4)
         nav_items[target] = item
+        last_row = row
+
+    # 弹性空白行把底部按钮推到最下，利用流程项排完后的空白处
+    nav.grid_rowconfigure(last_row + 1, weight=1)
+    analyze_btn = ctk.CTkButton(
+        nav,
+        text="分析本页 · 生成提示词",
+        command=lambda: _open_analyze(app, active_target),
+        fg_color=UI_COLORS["amber"],
+        hover_color=UI_COLORS.get("amber_hover", UI_COLORS["amber"]),
+        text_color="#ffffff",
+        font=("SimHei", 12, "bold"),
+        height=38,
+        corner_radius=6,
+    )
+    analyze_btn.grid(row=last_row + 2, column=0, sticky="ew", padx=12, pady=(8, 14))
 
     return nav
+
+
+def _open_analyze(app, target):
+    """打开「分析本页」提示词弹窗（延迟 import 以避免与 analyze_dialog 循环导入）。"""
+    from gui.analyze_dialog import AnalyzeDialog
+    AnalyzeDialog(app, app, target)
 
 
 def refresh_workflow_nav(nav_items, app, active_target, load_state=None):
@@ -300,11 +324,8 @@ def refresh_workflow_nav(nav_items, app, active_target, load_state=None):
         return
 
     loader_ok = app.loader is not None and app.loader.df is not None
-    cleaner_ok = (
-        app.cleaner is not None
-        and app.cleaner.df is not None
-        and "TotalPrice" in app.cleaner.df.columns
-    )
+    # 方案 B：清洗完成只看「有清洗后数据」，TotalPrice 等标准列在分析前的映射环节才出现
+    cleaner_ok = app.cleaner is not None and app.cleaner.df is not None
     rfm_ok = app.rfm_df is not None and "Label" in app.rfm_df.columns
     sales_done = cleaner_ok and chart_group_complete(app, "sales")
     product_done = cleaner_ok and chart_group_complete(app, "product")

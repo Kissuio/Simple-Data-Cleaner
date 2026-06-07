@@ -10,7 +10,7 @@ class Visualizer:
     本身不做业务聚合——大表的聚合放在 sales_trend.py / product_analysis.py，
     Visualizer 只负责"拿到结果数据 → 画 → 存图"。
 
-    8 个画图方法（对应项目 8 张图表）:
+    9 个画图方法（对应项目 9 张图表）:
         plot_label_pie()             —— 8 类客户占比饼图
         plot_label_avg_spend()       —— 各类客户人均消费柱图
         plot_rfm_scatter()           —— RFM 客户分布气泡图
@@ -19,16 +19,17 @@ class Visualizer:
         plot_top_revenue()           —— TOP10 销售额横向柱图
         plot_price_distribution()    —— 成交单价分布直方图（对数刻度）
         plot_weekday_hour_heatmap()  —— 星期 × 小时订单数热力图
+        plot_month_heatmap()         —— 年份 × 月份订单数热力图
 
     属性:
         output_dir (str): 图表 PNG 的保存目录，默认 "output"
     """
 
     def __init__(self, output_dir="output"):
-        """
-        可视化类的初始化，  
-        output_dir 为图表 PNG 的保存目录，  
-        并设置 matplotlib 中文字体。
+        """初始化输出目录并配置 matplotlib 中文字体。
+
+        参数:
+            output_dir: 图表 PNG 保存目录；不存在时自动创建
         """
 
         # 用 Path 包装目录，并确保它存在（不存在就连父级一起创建，已存在不报错）
@@ -81,7 +82,9 @@ class Visualizer:
 
         plt.figure(figsize=(11,7))
         for label,group in rfm.groupby("Label"):
-            size=np.log10(group["Monetary"]+1)*20
+            # 真实平台数据可能包含退款、补贴或价格调整，客户净金额会小于 0。
+            # 气泡面积不能为负；这里只裁剪绘图尺度，不修改 RFM 原始金额。
+            size = 8 + np.log10(group["Monetary"].clip(lower=0) + 1) * 20
             plt.scatter(group["Recency"],group["Frequency"],s=size,label=label,alpha=0.5)
         plt.yscale("log")
         plt.xlabel("Recency（最近消费距今天数）")
@@ -99,7 +102,6 @@ class Visualizer:
         返回 PNG 路径
         """
 
-        monthly=monthly.iloc[:-1]
         plt.figure(figsize=(10,6))
         plt.plot(monthly.index,monthly,marker="o")
         plt.title("月度销售趋势")
@@ -160,6 +162,37 @@ class Visualizer:
         plt.xlabel("小时")
         plt.ylabel("星期")
         path = self.output_dir / "weekday_hour_heatmap.png"
+        plt.savefig(path, bbox_inches="tight")
+        plt.close()
+        return str(path)
+
+    def plot_month_heatmap(self, pivot):
+        """各年各月订单数热力图（行=年、列=月），看不同年份的月份分布与季节性对比，
+        参数 pivot 为 get_month_orders(df) 返回的 年×12 DataFrame,
+        返回 PNG 路径
+
+        颜色按「每年自身」归一化（每行各自 0-1），避免年份总量差异（早年少、近年多）
+        淹没各年内部的月份对比——这样每排都能公平看出该年旺季在几月。
+        格子上的数字仍是真实订单数，跨年绝对量、逐年增长看数字即可。
+        """
+        month_names = [f"{int(m)}月" for m in pivot.columns]
+        year_names = [f"{int(y)}年" for y in pivot.index]
+        # 按行归一化用于着色：每行除以该行最大值（全 0 的行用 1 避免除零）
+        row_max = pivot.max(axis=1).replace(0, 1)
+        norm = pivot.div(row_max, axis=0)
+        # 高度随年份行数自适应，年多不至于挤
+        height = max(2.6, 0.6 * len(pivot) + 1.6)
+        plt.figure(figsize=(13, height))
+        sns.heatmap(
+            norm, annot=pivot, fmt=".0f", cmap="YlOrRd",
+            xticklabels=month_names, yticklabels=year_names,
+            cbar_kws={"label": "行内相对强度（每年各自 0-1）"},
+        )
+        plt.title("各年各月订单数分布（颜色按每年归一化）")
+        plt.xlabel("月份")
+        plt.ylabel("年份")
+        plt.yticks(rotation=0)
+        path = self.output_dir / "month_heatmap.png"
         plt.savefig(path, bbox_inches="tight")
         plt.close()
         return str(path)

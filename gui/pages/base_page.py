@@ -28,7 +28,7 @@ import customtkinter as ctk
 # 前置条件键 → 横幅提示文字 的映射
 REQUIRE_HINTS = {
     "loader": "⚠ 尚未加载数据 —— 请回到主页选择「加载数据」",
-    "cleaner": "⚠ 尚未完成清洗 —— 请回到主页选择「数据清洗」并执行【一键全清洗】",
+    "cleaner": "⚠ 尚未完成清洗 —— 请回到「数据清洗」完成清洗（进入分析时会再做字段映射）",
     "rfm": "⚠ 尚未生成 RFM 结果 —— 请回到主页选择「RFM 分群」并执行【一键全分析】",
     "rfm+cleaner": "⚠ 数据未准备齐 —— 需要先完成「数据清洗」与「RFM 分群」",
 }
@@ -146,10 +146,11 @@ class BasePage(ctk.CTkFrame):
                 and self.app.loader.df is not None
             )
         if self.requires == "cleaner":
+            # 方案 B：清洗完成只看「有清洗后数据」，不再要求 TotalPrice
+            # （标准列名/TotalPrice 在进入分析时的字段映射环节才出现）
             return (
                 self.app.cleaner is not None
                 and self.app.cleaner.df is not None
-                and "TotalPrice" in self.app.cleaner.df.columns
             )
         if self.requires == "rfm":
             return (
@@ -160,7 +161,6 @@ class BasePage(ctk.CTkFrame):
             cleaner_ok = (
                 self.app.cleaner is not None
                 and self.app.cleaner.df is not None
-                and "TotalPrice" in self.app.cleaner.df.columns
             )
             rfm_ok = (
                 self.app.rfm_df is not None

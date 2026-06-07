@@ -11,6 +11,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from analyzer.rfm_analyzer import RFMAnalyzer
+from gui.error_messages import show_friendly_error
 from gui.pages.base_page import BasePage
 from gui.widgets import (
     BORDER_WIDTH,
@@ -372,17 +373,24 @@ class RFMPage(BasePage):
         self._refresh_display()
 
     def _ensure_cleaner(self):
-        """检查清洗完整（依赖 TotalPrice 列）。"""
+        """检查清洗 + 字段映射就绪（方案 B：分析前需先把列映射到标准字段）。"""
         if self.app.cleaner is None or self.app.cleaner.df is None:
             messagebox.showwarning(
                 "尚未清洗数据",
-                "请先在【数据清洗】页执行清洗（推荐【一键全清洗】）。",
+                "请先在【数据清洗】页完成清洗。",
             )
             return False
-        if "TotalPrice" not in self.app.cleaner.df.columns:
+        if not self.app.is_mapped():
+            # 未映射 → 弹字段映射对话框；用户确认后再点一次按钮
+            self.app.open_field_mapping()
+            return False
+        missing = self.app.missing_fields_for("rfm")
+        if missing:
+            from data_handlers.field_mapping import FIELD_CN
+            names = "、".join(FIELD_CN.get(c, c) for c in missing)
             messagebox.showwarning(
-                "清洗不完整",
-                "RFM 分析需要 TotalPrice 列。\n请回到【数据清洗】点【一键全清洗】。",
+                "字段不足",
+                f"「RFM 分析」还需要这些字段：{names}\n请点顶部「⚙ 字段映射」补上对应列。",
             )
             return False
         return True
@@ -392,10 +400,10 @@ class RFMPage(BasePage):
         if not self._ensure_cleaner():
             return
         try:
-            analyzer = RFMAnalyzer(self.app.cleaner.df)
+            analyzer = RFMAnalyzer(self.app.get_active_df())
             analyzer.analyze_all()
         except Exception as e:
-            messagebox.showerror("分析失败", f"执行 RFM 分析时出错：\n{e}")
+            show_friendly_error("分析失败", e, "执行 RFM 分析", parent=self)
             return
         self.app.rfm_analyzer = analyzer
         self.app.rfm_df = analyzer.rfm
@@ -407,7 +415,7 @@ class RFMPage(BasePage):
         """重置 RFM 分析器，清空已有分析结果。"""
         if not self._ensure_cleaner():
             return
-        self.app.rfm_analyzer = RFMAnalyzer(self.app.cleaner.df)
+        self.app.rfm_analyzer = RFMAnalyzer(self.app.get_active_df())
         self.app.rfm_df = None
         reset_chart_progress(self.app, groups=("overview",))
         self._refresh_display()
@@ -417,12 +425,12 @@ class RFMPage(BasePage):
         if not self._ensure_cleaner():
             return
         if self.app.rfm_analyzer is None:
-            self.app.rfm_analyzer = RFMAnalyzer(self.app.cleaner.df)
+            self.app.rfm_analyzer = RFMAnalyzer(self.app.get_active_df())
         try:
             method = getattr(self.app.rfm_analyzer, method_name)
             method()
         except Exception as e:
-            messagebox.showerror("步骤失败", f"执行 {method_name} 时出错：\n{e}")
+            show_friendly_error("步骤失败", e, "执行当前 RFM 步骤", parent=self)
             return
         self.app.rfm_df = self.app.rfm_analyzer.rfm
         reset_chart_progress(self.app, groups=("overview",))

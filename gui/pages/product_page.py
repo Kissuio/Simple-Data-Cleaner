@@ -10,7 +10,13 @@ from analyzer.product_analysis import (
     get_top_revenue,
     get_price_distribution,
 )
+from analyzer.insights import (
+    top_quantity_insight,
+    top_revenue_insight,
+    price_distribution_insight,
+)
 from visualization.visualizer import Visualizer
+from gui.error_messages import show_friendly_error
 from gui.pages.base_page import BasePage
 from gui.widgets import (
     BORDER_WIDTH,
@@ -25,22 +31,7 @@ from gui.widgets import (
 CHART_BOX_SIZE = (720, 520)
 
 INSIGHTS = {
-    "empty": "选择上方图表后，这里会显示对应的商品运营洞察。",
-    "top_quantity": (
-        "• 销量冠军：WORLD WAR 2 GLIDERS ASSTD DESIGNS，全年 54223 件\n"
-        "• 销量榜多为低单价小商品，适合做引流款和组合销售\n"
-        "• 这类商品应关注库存周转，避免旺季断货"
-    ),
-    "top_revenue": (
-        "• 销售额冠军：REGENCY CAKESTAND 3 TIER，约 £134,770\n"
-        "• 销售额榜更能体现高客单价商品和稳定贡献商品\n"
-        "• 可优先围绕榜单商品做关联推荐、节日陈列和复购运营"
-    ),
-    "price_distribution": (
-        "• 单价呈明显右偏长尾，大部分商品集中在低价格带\n"
-        "• 中位数约 £1.85，说明低价商品是交易主体\n"
-        "• 高价商品数量少但可能贡献高毛利，适合单独制定运营策略"
-    ),
+    "empty": "选择上方图表后，这里会显示对应的商品运营洞察（按当前数据现算）。",
 }
 
 
@@ -249,11 +240,21 @@ class ProductPage(BasePage):
         self._refresh_nav_state()
 
     def _ensure_cleaner(self):
+        """检查清洗 + 字段映射就绪（方案 B：分析前需先把列映射到标准字段）。"""
         if self.app.cleaner is None or self.app.cleaner.df is None:
             messagebox.showwarning("尚未清洗数据", "请先在【数据清洗】执行清洗。")
             return False
-        if "TotalPrice" not in self.app.cleaner.df.columns:
-            messagebox.showwarning("清洗不完整", "商品分析需要 TotalPrice 列。")
+        if not self.app.is_mapped():
+            self.app.open_field_mapping()
+            return False
+        missing = self.app.missing_fields_for("product")
+        if missing:
+            from data_handlers.field_mapping import FIELD_CN
+            names = "、".join(FIELD_CN.get(c, c) for c in missing)
+            messagebox.showwarning(
+                "字段不足",
+                f"「商品分析」还需要这些字段：{names}\n请点顶部「⚙ 字段映射」补上对应列。",
+            )
             return False
         return True
 
@@ -267,14 +268,14 @@ class ProductPage(BasePage):
         if not self._ensure_cleaner():
             return
         try:
-            top = get_top_quantity(self.app.cleaner.df)
+            top = get_top_quantity(self.app.get_active_df())
             path = self._get_visualizer().plot_top_quantity(top)
         except Exception as e:
-            messagebox.showerror("生成失败", f"生成 TOP10 销量图时出错：\n{e}")
+            show_friendly_error("生成失败", e, "生成 TOP10 销量图", parent=self)
             return
         self.chart_title_var.set("TOP10 热销商品（按销量）")
         self._show_image(path)
-        self.insight_var.set(INSIGHTS["top_quantity"])
+        self.insight_var.set(top_quantity_insight(top))
         mark_chart_progress(self.app, "product", "top_quantity")
         self._refresh_nav_state()
         self.app.set_status(f"已生成：{path}")
@@ -284,14 +285,14 @@ class ProductPage(BasePage):
         if not self._ensure_cleaner():
             return
         try:
-            top = get_top_revenue(self.app.cleaner.df)
+            top = get_top_revenue(self.app.get_active_df())
             path = self._get_visualizer().plot_top_revenue(top)
         except Exception as e:
-            messagebox.showerror("生成失败", f"生成 TOP10 销售额图时出错：\n{e}")
+            show_friendly_error("生成失败", e, "生成 TOP10 销售额图", parent=self)
             return
         self.chart_title_var.set("TOP10 商品（按销售额）")
         self._show_image(path)
-        self.insight_var.set(INSIGHTS["top_revenue"])
+        self.insight_var.set(top_revenue_insight(top))
         mark_chart_progress(self.app, "product", "top_revenue")
         self._refresh_nav_state()
         self.app.set_status(f"已生成：{path}")
@@ -301,25 +302,31 @@ class ProductPage(BasePage):
         if not self._ensure_cleaner():
             return
         try:
-            prices = get_price_distribution(self.app.cleaner.df)
+            prices = get_price_distribution(self.app.get_active_df())
             path = self._get_visualizer().plot_price_distribution(prices)
         except Exception as e:
-            messagebox.showerror("生成失败", f"生成单价分布图时出错：\n{e}")
+            show_friendly_error("生成失败", e, "生成单价分布图", parent=self)
             return
         self.chart_title_var.set("成交单价分布")
         self._show_image(path)
-        self.insight_var.set(INSIGHTS["price_distribution"])
+        self.insight_var.set(price_distribution_insight(prices))
         mark_chart_progress(self.app, "product", "price_distribution")
         self._refresh_nav_state()
         self.app.set_status(f"已生成：{path}")
 
     def _refresh_metrics(self):
-        if self.app.cleaner is None or self.app.cleaner.df is None or "TotalPrice" not in self.app.cleaner.df.columns:
+        # 方案 B + 软门禁：未映射 / 缺商品所需列（数量/单价/商品名/编码）时，显示提示不取数
+        if not self.app.is_mapped():
+            note = "等待清洗" if self.app.cleaner is None else "等待映射"
             for key in self.metric_vars:
-                self._set_metric(key, "--", "等待清洗")
+                self._set_metric(key, "--", note)
+            return
+        if self.app.missing_fields_for("product"):
+            for key in self.metric_vars:
+                self._set_metric(key, "--", "缺字段")
             return
 
-        df = self.app.cleaner.df
+        df = self.app.get_active_df()
         products = df["StockCode"].nunique()
         quantity = int(df["Quantity"].sum())
         prices = get_price_distribution(df)
@@ -352,7 +359,7 @@ class ProductPage(BasePage):
                 size=img.size,
             )
         except Exception as e:
-            messagebox.showerror("加载图片失败", f"无法加载 {path}：\n{e}")
+            show_friendly_error("加载图片失败", e, "打开生成的图表", parent=self)
             return
         self.image_label.configure(image=ctk_img, text="")
         self.current_image = ctk_img
