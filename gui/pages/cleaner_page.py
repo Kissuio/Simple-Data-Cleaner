@@ -6,7 +6,8 @@
 - 展示当前文件清洗日志，并保留切换文件前归档的历史清洗日志。
 """
 
-from tkinter import messagebox
+from pathlib import Path
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
@@ -18,16 +19,19 @@ from gui.widgets import (
     BORDER_WIDTH,
     MetricCard,
     UI_COLORS as COLORS,
+    build_table,
     build_workflow_nav,
     refresh_workflow_nav,
     reset_chart_progress,
 )
 
+CLEAN_PREVIEW_ROWS = 10
 
-CLEANING_GUIDE = """一、这里不是固定清洗流水线
+
+CLEANING_GUIDE = """一、清洗工具按需取用，没有固定顺序
 
 页面上的「删除行工具」「类型转换工具」「整理 / 派生工具」是三类工具入口，
-不是必须从左到右执行的快捷流程，也不是点一次就会完成整套清洗。
+不必从左到右依次执行，点一次也不会自动跑完整套清洗。
 
 每次点击一个分类后，需要在弹窗顶部选择具体操作，再选择它作用的列和参数。
 操作会累积应用在当前数据上；你可以按数据实际情况自由组合、重复使用或跳过。
@@ -64,6 +68,7 @@ CLEANING_GUIDE = """一、这里不是固定清洗流水线
 · 每次有效清洗操作前都会保存快照，可以点击「撤销上一步」。
 · 「重置」会回到当前文件刚加载时的原始数据，清空本文件的清洗结果。
 · 清洗在内存副本上进行，不会直接修改磁盘里的 CSV 或 Excel 文件。
+· 可以在清洗页预览当前清洗结果，并导出为新的 CSV 或 Excel 文件。
 · 每次操作后请查看行数变化和日志；删除数量异常时应先撤销并检查参数。
 """
 
@@ -80,12 +85,17 @@ class CleanerPage(BasePage):
             next_page="RFM 分析",
         )
         self.info_var = ctk.StringVar(value="当前数据状态：尚未加载数据")
+        self.preview_title_var = ctk.StringVar(value="当前数据预览（等待数据）")
+        self.preview_note_var = ctk.StringVar(value="加载数据后将在这里显示当前清洗结果前 10 行。")
         self.metric_vars = {}
         self.nav_items = {}
+        self.preview_table = None
+        self.preview_empty_label = None
+        self.export_button = None
         self._build_body()
 
     def _build_body(self):
-        """搭页面：流程导航 + 清洗操作 + 日志。"""
+        """搭页面：流程导航 + 清洗操作 + 结果预览 + 日志。"""
         self.body.configure(fg_color=COLORS["page_bg"])
         self.body.grid_columnconfigure(0, weight=0)
         self.body.grid_columnconfigure(1, weight=1)
@@ -97,10 +107,12 @@ class CleanerPage(BasePage):
         main = ctk.CTkFrame(self.body, fg_color="transparent", corner_radius=0)
         main.grid(row=0, column=1, sticky="nsew", padx=(0, 24), pady=24)
         main.grid_columnconfigure(0, weight=1)
-        main.grid_rowconfigure(2, weight=1)
+        main.grid_rowconfigure(2, weight=2)
+        main.grid_rowconfigure(3, weight=1)
 
         self._build_metrics(main)
         self._build_action_panel(main)
+        self._build_preview_panel(main)
         self._build_log_panels(main)
 
     def _build_workflow_nav(self, parent):
@@ -194,7 +206,7 @@ class CleanerPage(BasePage):
         ctk.CTkLabel(
             panel,
             text=(
-                "工具分类（不是固定流水线）：下面每个按钮代表一类可选工具。"
+                "工具分类（按需取用、顺序自定）：下面每个按钮代表一类可选工具。"
                 "点击后再选择具体操作、作用列和参数，可按数据问题自由组合或跳过。"
             ),
             font=("SimHei", 11, "bold"),
@@ -227,9 +239,63 @@ class CleanerPage(BasePage):
             )
             btn.grid(row=0, column=idx, sticky="ew", padx=6, pady=10)
 
+    def _build_preview_panel(self, parent):
+        """构建当前清洗结果预览和导出入口。"""
+        panel = ctk.CTkFrame(
+            parent,
+            fg_color=COLORS["panel_bg"],
+            border_color=COLORS["border"],
+            border_width=BORDER_WIDTH,
+            corner_radius=8,
+        )
+        panel.grid(row=2, column=0, sticky="nsew", pady=(0, 16))
+        panel.grid_columnconfigure(0, weight=1)
+        panel.grid_rowconfigure(2, weight=1)
+
+        ctk.CTkLabel(
+            panel,
+            textvariable=self.preview_title_var,
+            font=("SimHei", 15, "bold"),
+            text_color=COLORS["text"],
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew", padx=18, pady=(16, 4))
+
+        self.export_button = ctk.CTkButton(
+            panel,
+            text="导出当前数据",
+            command=self._on_export_cleaned,
+            fg_color=COLORS["green"],
+            hover_color=COLORS["green_hover"],
+            font=("SimHei", 12, "bold"),
+            height=34,
+            width=116,
+            corner_radius=6,
+            state="disabled",
+        )
+        self.export_button.grid(row=0, column=1, sticky="e", padx=18, pady=(16, 4))
+
+        ctk.CTkLabel(
+            panel,
+            textvariable=self.preview_note_var,
+            font=("SimHei", 11),
+            text_color=COLORS["muted"],
+            anchor="w",
+            justify="left",
+        ).grid(row=1, column=0, columnspan=2, sticky="ew", padx=18, pady=(0, 8))
+
+        self.preview_container = ctk.CTkFrame(
+            panel,
+            fg_color="#ffffff",
+            border_color=COLORS["border"],
+            border_width=BORDER_WIDTH,
+            corner_radius=8,
+        )
+        self.preview_container.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=18, pady=(0, 16))
+        self._show_preview_empty("加载数据后将在这里显示当前数据。")
+
     def _build_log_panels(self, parent):
         logs = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
-        logs.grid(row=2, column=0, sticky="nsew")
+        logs.grid(row=3, column=0, sticky="nsew")
         logs.grid_columnconfigure(0, weight=1)
         logs.grid_columnconfigure(1, weight=1)
         logs.grid_rowconfigure(0, weight=1)
@@ -291,6 +357,7 @@ class CleanerPage(BasePage):
         if (
             self.app.loader is not None
             and self.app.loader.df is not None
+            and self.app.guided_mode_var.get()
             and not self.app.cleaning_intro_seen
         ):
             self.app.cleaning_intro_seen = True
@@ -368,6 +435,56 @@ class CleanerPage(BasePage):
         self._refresh_display()
         self.app.set_status(f"已执行 {method_name}：{before:,} → {after:,} 行")
 
+    def _current_result_df(self):
+        """返回当前清洗页应展示/导出的数据，以及数据状态标签。"""
+        if self.app.cleaner is not None and self.app.cleaner.df is not None:
+            return self.app.cleaner.df, "cleaned"
+        if self.app.loader is not None and self.app.loader.df is not None:
+            return self.app.loader.df, "raw"
+        return None, "none"
+
+    def _default_export_name(self):
+        """根据当前文件名生成清洗结果导出的默认文件名。"""
+        if self.app.loader is None:
+            return "cleaned_data.csv"
+        path = getattr(self.app.loader, "file_path", "") or ""
+        stem = Path(path).stem or "cleaned_data"
+        return f"{stem}_cleaned.csv"
+
+    def _export_dataframe(self, df, path):
+        """按目标后缀导出 DataFrame；.xlsx 用 Excel，其余默认 CSV。"""
+        suffix = Path(path).suffix.lower()
+        if suffix == ".xlsx":
+            df.to_excel(path, index=False)
+        else:
+            df.to_csv(path, index=False, encoding="utf-8-sig")
+
+    def _on_export_cleaned(self):
+        """导出当前清洗结果，不覆盖原始数据文件。"""
+        df, _state = self._current_result_df()
+        if df is None:
+            messagebox.showwarning("没有可导出数据", "请先在【加载数据】页导入数据。")
+            return
+        path = filedialog.asksaveasfilename(
+            title="导出当前清洗结果",
+            defaultextension=".csv",
+            filetypes=[
+                ("CSV 文件", "*.csv"),
+                ("Excel 文件", "*.xlsx"),
+                ("所有文件", "*.*"),
+            ],
+            initialfile=self._default_export_name(),
+        )
+        if not path:
+            return
+        try:
+            self._export_dataframe(df, path)
+        except Exception as e:
+            show_friendly_error("导出失败", e, "导出当前清洗结果", parent=self)
+            return
+        self.app.set_status(f"已导出当前数据：{path}")
+        messagebox.showinfo("导出成功", f"已导出 {len(df):,} 行数据到：\n{path}")
+
     def _refresh_display(self):
         """更新指标、导航和日志显示。"""
         loader_df = self.app.loader.df if self.app.loader else None
@@ -401,6 +518,7 @@ class CleanerPage(BasePage):
         self._set_metric("state", state, "清洗流程状态")
 
         self._refresh_nav_state()
+        self._refresh_preview()
         self._refresh_current_log()
         self._refresh_history_log()
 
@@ -434,6 +552,62 @@ class CleanerPage(BasePage):
             for line in entry.get("log", []):
                 self.history_text.insert("end", f"  • {line}\n")
             self.history_text.insert("end", "\n")
+
+    def _refresh_preview(self):
+        """刷新当前清洗结果预览表。"""
+        if not hasattr(self, "preview_container"):
+            return
+        df, state = self._current_result_df()
+        self._clear_preview_content()
+        if df is None:
+            self.preview_title_var.set("当前数据预览（等待数据）")
+            self.preview_note_var.set("加载数据后将在这里显示当前清洗结果前 10 行。")
+            self._set_export_enabled(False)
+            self._show_preview_empty("请先加载数据。")
+            return
+
+        title = "清洗后数据预览" if state == "cleaned" else "原始数据预览（尚未执行清洗）"
+        rows_to_show = min(CLEAN_PREVIEW_ROWS, len(df))
+        self.preview_title_var.set(f"{title}（前 {rows_to_show} 行）")
+        note = f"当前 {len(df):,} 行 × {len(df.columns):,} 列。"
+        if state == "raw":
+            note += " 还没有执行清洗，导出时会导出原始导入数据的当前副本。"
+        else:
+            note += " 导出会保存当前清洗结果，不会修改原始文件。"
+        self.preview_note_var.set(note)
+        self._set_export_enabled(True)
+
+        rows = [
+            tuple(str(value) for value in row)
+            for _, row in df.head(CLEAN_PREVIEW_ROWS).iterrows()
+        ]
+        self.preview_table = build_table(
+            self.preview_container,
+            columns=list(df.columns),
+            rows=rows,
+            height=240,
+        )
+        self.preview_table.pack(fill="both", expand=True, padx=2, pady=2)
+
+    def _set_export_enabled(self, enabled):
+        if self.export_button is not None:
+            self.export_button.configure(state="normal" if enabled else "disabled")
+
+    def _clear_preview_content(self):
+        for child in self.preview_container.winfo_children():
+            child.destroy()
+        self.preview_table = None
+        self.preview_empty_label = None
+
+    def _show_preview_empty(self, message):
+        self.preview_empty_label = ctk.CTkLabel(
+            self.preview_container,
+            text=message,
+            font=("SimHei", 12),
+            text_color=COLORS["muted"],
+            justify="center",
+        )
+        self.preview_empty_label.pack(expand=True, padx=12, pady=12)
 
     def _current_file_name(self):
         if self.app.loader is None:

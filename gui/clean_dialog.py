@@ -20,6 +20,20 @@ from gui.widgets import BORDER_WIDTH, UI_COLORS as COLORS
 # 「值」候选最多列这么多项；超过则截断（用户仍可在输入框手动输入）
 VALUE_CANDIDATE_LIMIT = 300
 
+# 弹窗高度控制：删除行工具箱含高级多参数工具，原本会撑到 840，视觉上过长。
+CLEAN_DIALOG_WIDTH = 560
+CLEAN_DIALOG_BASE_HEIGHT = 250
+CLEAN_DIALOG_DEFAULT_MAX_HEIGHT = 840
+CLEAN_DIALOG_DELETE_ROW_MAX_HEIGHT = 590
+CLEAN_DIALOG_PARAM_HEIGHTS = {
+    "single_col": 150,
+    "multi_col": 195,
+    "value": 195,
+    "choice": 70,
+    "number": 70,
+    "text": 70,
+}
+
 
 # 通用清洗工具箱。每项：
 #   key   —— DataCleaner 上的方法名
@@ -118,6 +132,25 @@ def steps_in_category(cat):
     return [by_key[k] for k in cat["keys"] if k in by_key]
 
 
+def clean_dialog_param_height(param):
+    """Estimate the vertical space needed by one parameter control."""
+    return CLEAN_DIALOG_PARAM_HEIGHTS.get(param["kind"], 90)
+
+
+def clean_dialog_height(steps, title):
+    """Estimate dialog height for a cleaning toolbox category."""
+    max_params_height = max(
+        (sum(clean_dialog_param_height(p) for p in step["params"]) for step in steps),
+        default=0,
+    )
+    max_height = (
+        CLEAN_DIALOG_DELETE_ROW_MAX_HEIGHT
+        if title == "删除行"
+        else CLEAN_DIALOG_DEFAULT_MAX_HEIGHT
+    )
+    return min(max_height, CLEAN_DIALOG_BASE_HEIGHT + max_params_height)
+
+
 class _ScrollList(ctk.CTkFrame):
     """单选/多选列表（普通容器、自身不滚动）。
 
@@ -213,10 +246,10 @@ class CleanStepDialog(ctk.CTkToplevel):
         self._value_list = None   # 「值」候选滚动列表
 
         self.title(f"清洗 —— {title}")
-        # 高度按该类里「参数最多」的操作估，避免切换操作时窗口忽高忽低
-        h = min(840, 250 + max(
-            sum(self._param_height(p) for p in s["params"]) for s in steps))
-        self.geometry(f"560x{h}")
+        # 高度按该类里「参数最多」的操作估，避免切换操作时窗口忽高忽低；
+        # 删除行工具箱参数最多，初始高度单独压短，靠内部滚动承载完整内容。
+        h = clean_dialog_height(steps, title)
+        self.geometry(f"{CLEAN_DIALOG_WIDTH}x{h}")
         self.configure(fg_color=COLORS["page_bg"])
 
         self._build()
@@ -231,11 +264,10 @@ class CleanStepDialog(ctk.CTkToplevel):
         self.focus_force()
 
     # 各类参数控件的估高（用于对话框自适应高度）
-    _PARAM_H = {"single_col": 150, "multi_col": 195, "value": 195,
-                "choice": 70, "number": 70, "text": 70}
+    _PARAM_H = CLEAN_DIALOG_PARAM_HEIGHTS
 
     def _param_height(self, p):
-        return self._PARAM_H.get(p["kind"], 90)
+        return clean_dialog_param_height(p)
 
     # ───── UI ─────
 
