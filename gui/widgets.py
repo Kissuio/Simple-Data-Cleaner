@@ -1,7 +1,7 @@
 """可复用 UI 组件工具模块。
 
 目前提供：
-    build_table(parent, columns, rows) —— 用 customtkinter 拼一个简单表格
+    build_table(parent, columns, rows) —— 用 customtkinter 拼一个可双向滚动的简单表格
     build_workflow_nav(...) / refresh_workflow_nav(...) —— 统一左侧流程导航
     MetricCard —— 统一指标卡片
 
@@ -10,6 +10,8 @@
     项目里多页都需要表格、指标卡和流程导航，统一在这里实现一份，
     避免每页面重复写"循环 CTkLabel + grid 布局"和状态刷新代码。
 """
+
+import tkinter as tk
 
 import customtkinter as ctk
 
@@ -71,7 +73,7 @@ REQUIRED_CHART_PROGRESS = {
 
 
 def make_chart_progress():
-    """创建 GUI 层图表生成进度，不依赖 output 目录里的旧文件。"""
+    """创建 GUI 层图表生成进度，不依赖旧输出文件夹里的历史图片。"""
     return {group: set() for group in REQUIRED_CHART_PROGRESS}
 
 
@@ -100,6 +102,33 @@ def reset_chart_progress(app, groups=None):
     targets = groups or REQUIRED_CHART_PROGRESS.keys()
     for group in targets:
         progress.setdefault(group, set()).clear()
+
+
+def apply_hanging_indent(ctk_textbox):
+    """让要点行(以 · 或 — 开头，允许前置空格)自动折行后的续行对齐到要点正文下方。
+
+    CTkTextbox / 底层 tkinter Text 会按宽度自动折行；默认续行顶回最左，
+    看起来像「意外断开」。这里给每个要点行配一个 lmargin2 = 其前缀
+    (前置空格 + 标记符 + 其后空格)的像素宽度的悬挂缩进，使折行续行缩进到
+    与要点正文左对齐。纯展示用，不改变文本内容；对非要点行不做处理。
+    """
+    import tkinter.font as tkfont
+
+    under = ctk_textbox._textbox
+    font = tkfont.Font(font=under.cget("font"))
+    last_line = int(under.index("end-1c").split(".")[0])
+    for ln in range(1, last_line + 1):
+        seg = under.get(f"{ln}.0", f"{ln}.end")
+        stripped = seg.lstrip()
+        if not stripped or stripped[0] not in "·—":
+            continue
+        i = len(seg) - len(stripped) + 1  # 跳过前置空格与标记符
+        while i < len(seg) and seg[i] == " ":
+            i += 1
+        indent = font.measure(seg[:i])
+        tag = f"hang{indent}"
+        under.tag_configure(tag, lmargin2=indent)
+        under.tag_add(tag, f"{ln}.0", f"{ln}.end")
 
 
 def chart_group_complete(app, group):
@@ -298,7 +327,7 @@ def build_workflow_nav(parent, app, active_target, nav_items):
     nav.grid_rowconfigure(last_row + 1, weight=1)
     analyze_btn = ctk.CTkButton(
         nav,
-        text="分析本页 · 生成提示词",
+        text="AI 分析本页 · 截图解读",
         command=lambda: _open_analyze(app, active_target),
         fg_color=UI_COLORS["amber"],
         hover_color=UI_COLORS.get("amber_hover", UI_COLORS["amber"]),
@@ -313,7 +342,7 @@ def build_workflow_nav(parent, app, active_target, nav_items):
 
 
 def _open_analyze(app, target):
-    """打开「分析本页」提示词弹窗（延迟 import 以避免与 analyze_dialog 循环导入）。"""
+    """打开「AI 分析本页」弹窗（截图 + 选模型解读；延迟 import 避免循环导入）。"""
     from gui.analyze_dialog import AnalyzeDialog
     AnalyzeDialog(app, app, target)
 
@@ -362,10 +391,151 @@ HEADER_FG = "#2c3e50"           # 表头深蓝灰字
 ROW_BG_ODD = "#ffffff"          # 奇数行白底
 ROW_BG_EVEN = "#f8f9fa"         # 偶数行更浅灰（交替条纹）
 TEXT_COLOR = "#2c3e50"
+TABLE_COL_MIN_WIDTH = 88
+TABLE_COL_MAX_WIDTH = 260
+
+
+def _text_units(value):
+    """估算文本显示宽度；中文等宽字符按 2 个英文字符计。"""
+    return sum(2 if ord(ch) > 127 else 1 for ch in str(value))
+
+
+def _table_column_widths(columns, rows):
+    """根据表头和样例行估算每列像素宽度，并限制最大宽度。"""
+    widths = []
+    for col_idx, col_name in enumerate(columns):
+        max_units = _text_units(col_name)
+        for row in rows:
+            if col_idx < len(row):
+                max_units = max(max_units, _text_units(row[col_idx]))
+        width = max(TABLE_COL_MIN_WIDTH, min(TABLE_COL_MAX_WIDTH, max_units * 8 + 28))
+        widths.append(width)
+    return widths
+
+
+class ScrollableTable(ctk.CTkFrame):
+    """同时支持纵向和横向滚动的轻量表格容器。"""
+
+    def __init__(self, parent, columns, rows, height=200):
+        super().__init__(parent, fg_color="transparent", corner_radius=0)
+        self.rows = [tuple(row) for row in rows]
+        self.columns = list(columns)
+        self.column_widths = _table_column_widths(self.columns, self.rows)
+
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        self.canvas = tk.Canvas(
+            self,
+            bg="#ffffff",
+            highlightthickness=0,
+            borderwidth=0,
+            height=height,
+        )
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+
+        self.v_scroll = ctk.CTkScrollbar(
+            self,
+            orientation="vertical",
+            command=self.canvas.yview,
+            width=14,
+        )
+        self.v_scroll.grid(row=0, column=1, sticky="ns")
+
+        self.h_scroll = ctk.CTkScrollbar(
+            self,
+            orientation="horizontal",
+            command=self.canvas.xview,
+            height=14,
+        )
+        self.h_scroll.grid(row=1, column=0, sticky="ew")
+
+        self.canvas.configure(
+            yscrollcommand=self.v_scroll.set,
+            xscrollcommand=self.h_scroll.set,
+        )
+
+        self.table_frame = ctk.CTkFrame(
+            self.canvas,
+            fg_color="transparent",
+            corner_radius=0,
+        )
+        self._window_id = self.canvas.create_window(
+            (0, 0),
+            window=self.table_frame,
+            anchor="nw",
+        )
+
+        self.table_frame.bind("<Configure>", self._on_table_configure)
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+        self._render()
+
+    def _on_table_configure(self, _event=None):
+        """内容尺寸变化后刷新滚动范围。"""
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _on_canvas_configure(self, event):
+        """表格较窄时铺满视口，较宽时保留自然宽度供横向滚动。"""
+        natural_width = self.table_frame.winfo_reqwidth()
+        self.canvas.itemconfigure(self._window_id, width=max(natural_width, event.width))
+        self._on_table_configure()
+
+    def _bind_mousewheel(self, widget):
+        """让鼠标滚轮在表格子控件上也能滚动；Shift+滚轮横向滚动。"""
+        widget.bind("<MouseWheel>", self._on_mousewheel)
+        widget.bind("<Shift-MouseWheel>", self._on_shift_mousewheel)
+
+    def _on_mousewheel(self, event):
+        if event.state & 0x0001:
+            return self._on_shift_mousewheel(event)
+        self.canvas.yview_scroll(-int(event.delta / 120), "units")
+        return "break"
+
+    def _on_shift_mousewheel(self, event):
+        self.canvas.xview_scroll(-int(event.delta / 120), "units")
+        return "break"
+
+    def _render(self):
+        """渲染表头和数据行。"""
+        self._bind_mousewheel(self.canvas)
+        self._bind_mousewheel(self.table_frame)
+
+        for col_idx, col_name in enumerate(self.columns):
+            header = ctk.CTkLabel(
+                self.table_frame,
+                text=str(col_name),
+                width=self.column_widths[col_idx],
+                font=("SimHei", 12, "bold"),
+                fg_color=HEADER_BG,
+                text_color=HEADER_FG,
+                anchor="w",
+                corner_radius=0,
+            )
+            header.grid(row=0, column=col_idx, sticky="nsew", padx=1, pady=(0, 1))
+            self._bind_mousewheel(header)
+
+        for row_idx, row in enumerate(self.rows, start=1):
+            bg = ROW_BG_ODD if row_idx % 2 == 1 else ROW_BG_EVEN
+            for col_idx, value in enumerate(row[:len(self.columns)]):
+                cell = ctk.CTkLabel(
+                    self.table_frame,
+                    text=str(value),
+                    width=self.column_widths[col_idx],
+                    font=("SimHei", 11),
+                    fg_color=bg,
+                    text_color=TEXT_COLOR,
+                    anchor="w",
+                    corner_radius=0,
+                )
+                cell.grid(row=row_idx, column=col_idx, sticky="nsew", padx=1, pady=0)
+                self._bind_mousewheel(cell)
+
+        for col_idx, width in enumerate(self.column_widths):
+            self.table_frame.grid_columnconfigure(col_idx, weight=0, minsize=width)
 
 
 def build_table(parent, columns, rows, height=200):
-    """构建一个表格（CTkScrollableFrame + CTkLabel grid）。
+    """构建一个支持横向/纵向滚动的表格（Canvas + CTkLabel grid）。
 
     Args:
         parent:  父容器（任何 CTk 容器）
@@ -374,7 +544,7 @@ def build_table(parent, columns, rows, height=200):
         height:  表格高度（像素），决定多少行后开始滚动
 
     Returns:
-        CTkScrollableFrame 实例，已填好表头 + 数据行。
+        ScrollableTable 实例，已填好表头 + 数据行。
         调用方负责 pack / grid 到所需位置。
 
     使用：
@@ -388,48 +558,4 @@ def build_table(parent, columns, rows, height=200):
         self.table = build_table(parent, columns, new_rows)
         self.table.pack(fill="both", expand=True)
     """
-    # CTkScrollableFrame 自带垂直滚动条；fg_color=transparent 让背景跟随父容器
-    table = ctk.CTkScrollableFrame(
-        parent,
-        fg_color="transparent",
-        height=height,
-        corner_radius=0,
-    )
-
-    # ───── 表头（第 0 行）─────
-    for col_idx, col_name in enumerate(columns):
-        header = ctk.CTkLabel(
-            table,
-            text=str(col_name),
-            font=("SimHei", 12, "bold"),
-            fg_color=HEADER_BG,
-            text_color=HEADER_FG,
-            anchor="w",
-            corner_radius=0,
-        )
-        # ipadx/ipady 在 CTkLabel 上无效；用 grid 的 padx/pady 控制单元格间距
-        # sticky="ew" 让单元格横向填满分配到的宽度
-        header.grid(row=0, column=col_idx, sticky="ew", padx=1, pady=(0, 1))
-
-    # ───── 数据行（第 1 行起）─────
-    for row_idx, row in enumerate(rows, start=1):
-        # 交替行底色（奇数行白 / 偶数行更浅灰）
-        bg = ROW_BG_ODD if row_idx % 2 == 1 else ROW_BG_EVEN
-        for col_idx, value in enumerate(row):
-            cell = ctk.CTkLabel(
-                table,
-                text=str(value),
-                font=("SimHei", 11),
-                fg_color=bg,
-                text_color=TEXT_COLOR,
-                anchor="w",
-                corner_radius=0,
-            )
-            cell.grid(row=row_idx, column=col_idx, sticky="ew", padx=1, pady=0)
-
-    # ───── 列宽：所有列等比例分配空间 ─────
-    # weight=1 让 grid 把多余宽度均分给各列；如果某列内容长会自动适应
-    for col_idx in range(len(columns)):
-        table.grid_columnconfigure(col_idx, weight=1)
-
-    return table
+    return ScrollableTable(parent, columns, rows, height=height)

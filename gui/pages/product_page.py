@@ -6,6 +6,7 @@ import customtkinter as ctk
 from PIL import Image
 
 from analyzer.product_analysis import (
+    get_product_count,
     get_top_quantity,
     get_top_revenue,
     get_price_distribution,
@@ -15,7 +16,6 @@ from analyzer.insights import (
     top_revenue_insight,
     price_distribution_insight,
 )
-from visualization.visualizer import Visualizer
 from gui.error_messages import show_friendly_error
 from gui.pages.base_page import BasePage
 from gui.widgets import (
@@ -256,12 +256,12 @@ class ProductPage(BasePage):
                 f"「商品分析」还需要这些字段：{names}\n请点顶部「⚙ 字段映射」补上对应列。",
             )
             return False
+        if not self.app.require_types_ready("product"):
+            return False
         return True
 
     def _get_visualizer(self):
-        if self.app.visualizer is None:
-            self.app.visualizer = Visualizer()
-        return self.app.visualizer
+        return self.app.get_visualizer()
 
     def _on_top_quantity(self):
         """生成「TOP10 热销商品（按销量）」图并展示，同时更新洞察与进度。"""
@@ -325,9 +325,13 @@ class ProductPage(BasePage):
             for key in self.metric_vars:
                 self._set_metric(key, "--", "缺字段")
             return
+        if self.app.type_guidance("product"):
+            for key in self.metric_vars:
+                self._set_metric(key, "--", "待转换列类型")
+            return
 
         df = self.app.get_active_df()
-        products = df["StockCode"].nunique()
+        products = get_product_count(df)
         quantity = int(df["Quantity"].sum())
         prices = get_price_distribution(df)
         prices = prices[prices > 0]
@@ -341,7 +345,7 @@ class ProductPage(BasePage):
             top_name = "无"
             top_value = 0
 
-        self._set_metric("products", f"{products:,}", "不同商品编码")
+        self._set_metric("products", f"{products:,}", "不同商品数")
         self._set_metric("quantity", f"{quantity:,}", "累计销售件数")
         self._set_metric("median_price", f"£{median_price:.2f}", "成交单价中位数")
         self._set_metric("top_revenue", self._fmt_money(top_value), self._clip(top_name, 20))

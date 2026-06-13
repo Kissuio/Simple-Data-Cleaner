@@ -82,7 +82,7 @@ def friendly_error_message(error, action="当前操作"):
         suggestions = ["检查网络和 Base URL 是否正确。", "稍后重试，或换用可用的 AI 服务。"]
     elif any(token in text for token in ("image", "png", "jpeg", "cannot identify")):
         reason = "图片文件不存在、未生成完整，或格式无法识别。"
-        suggestions = ["返回图表页面重新生成该图。", "确认 output 目录中的图片没有被移动或占用。"]
+        suggestions = ["返回图表页面重新生成该图。", "确认当前数据对应的输出图片文件夹没有被移动或占用。"]
     else:
         reason = _short_reason(raw) or "遇到了未识别的数据格式或当前状态不满足这一步的要求。"
         suggestions = ["检查当前数据是否还有记录，以及所需列是否存在。", "尝试撤销最近一次清洗、重置筛选后再操作。"]

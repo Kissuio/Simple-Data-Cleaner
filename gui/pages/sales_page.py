@@ -15,7 +15,6 @@ from analyzer.insights import (
     weekday_hour_insight,
     month_insight,
 )
-from visualization.visualizer import Visualizer
 from gui.error_messages import show_friendly_error
 from gui.pages.base_page import BasePage
 from gui.widgets import (
@@ -256,12 +255,12 @@ class SalesPage(BasePage):
                 f"「销售分析」还需要这些字段：{names}\n请点顶部「⚙ 字段映射」补上对应列。",
             )
             return False
+        if not self.app.require_types_ready("sales"):
+            return False
         return True
 
     def _get_visualizer(self):
-        if self.app.visualizer is None:
-            self.app.visualizer = Visualizer()
-        return self.app.visualizer
+        return self.app.get_visualizer()
 
     def _on_monthly_trend(self):
         """生成「月度销售趋势」图并展示，同时更新洞察与进度。"""
@@ -324,6 +323,10 @@ class SalesPage(BasePage):
         if self.app.missing_fields_for("sales"):
             for key in self.metric_vars:
                 self._set_metric(key, "--", "缺字段")
+            return
+        if self.app.type_guidance("sales"):
+            for key in self.metric_vars:
+                self._set_metric(key, "--", "待转换列类型")
             return
 
         df = self.app.get_active_df()

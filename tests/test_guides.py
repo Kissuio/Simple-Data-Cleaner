@@ -9,12 +9,12 @@ from gui.window import RFM_MAPPING_GUIDE
 
 
 class GuideTests(unittest.TestCase):
-    """验证清洗与映射说明能够消除固定流水线误解并可重复打开。"""
+    """验证清洗与映射说明能够说明工具无固定顺序并可重复打开。"""
 
     def test_cleaning_guide_explicitly_rejects_fixed_pipeline_model(self):
-        """清洗说明必须明确工具分类不是固定执行步骤。"""
+        """清洗说明必须明确工具分类没有固定执行顺序。"""
         for phrase in [
-            "不是固定清洗流水线",
+            "没有固定顺序",
             "三类工具入口",
             "自由组合",
             "撤销上一步",
@@ -28,6 +28,7 @@ class GuideTests(unittest.TestCase):
         page.app = SimpleNamespace(
             loader=SimpleNamespace(df=pd.DataFrame({"x": [1]})),
             cleaning_intro_seen=False,
+            guided_mode_var=SimpleNamespace(get=lambda: True),
         )
         page._show_cleaning_guide = lambda: setattr(page, "show_count", 1)
         page.show_count = 0
@@ -37,6 +38,22 @@ class GuideTests(unittest.TestCase):
 
         self.assertTrue(page.app.cleaning_intro_seen)
         self.assertEqual(page.show_count, 1)
+
+    def test_cleaning_guide_not_auto_shown_when_guided_mode_off(self):
+        """引导模式关闭时，进入清洗页不应自动弹说明（提示改到新手学习入口）。"""
+        page = CleanerPage.__new__(CleanerPage)
+        page.app = SimpleNamespace(
+            loader=SimpleNamespace(df=pd.DataFrame({"x": [1]})),
+            cleaning_intro_seen=False,
+            guided_mode_var=SimpleNamespace(get=lambda: False),
+        )
+        page._show_cleaning_guide = lambda: setattr(page, "show_count", 1)
+        page.show_count = 0
+
+        CleanerPage._maybe_show_cleaning_guide(page)
+
+        self.assertEqual(page.show_count, 0)
+        self.assertFalse(page.app.cleaning_intro_seen)
 
     def test_cleaning_help_button_method_can_reopen_dialog(self):
         """手动帮助入口应随时能够重新打开清洗说明。"""

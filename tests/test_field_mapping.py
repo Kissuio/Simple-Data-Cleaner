@@ -144,6 +144,37 @@ class ApplyFieldMappingTests(unittest.TestCase):
         self.assertEqual(missing_required_fields(columns, "product"), [])
         self.assertEqual(missing_required_fields(columns, "overview"), [])
 
+    def test_named_products_do_not_require_stock_code(self):
+        """只有商品名称、没有 SKU 编码时，也应允许进入商品分析。"""
+        columns = [
+            "CustomerID",
+            "InvoiceNo",
+            "InvoiceDate",
+            "Quantity",
+            "UnitPrice",
+            "Description",
+            "TotalPrice",
+        ]
+
+        self.assertEqual(missing_required_fields(columns, "product"), [])
+        self.assertEqual(missing_required_fields(columns, "overview"), [])
+
+    def test_missing_product_identity_uses_alternative_hint(self):
+        """编码和名称都缺时，提示应表达“二选一”而不是写死编码。"""
+        columns = [
+            "CustomerID",
+            "InvoiceNo",
+            "InvoiceDate",
+            "Quantity",
+            "UnitPrice",
+            "TotalPrice",
+        ]
+
+        self.assertEqual(
+            missing_required_fields(columns, "product"),
+            ["StockCode|Description"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

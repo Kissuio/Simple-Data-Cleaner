@@ -393,6 +393,8 @@ class RFMPage(BasePage):
                 f"「RFM 分析」还需要这些字段：{names}\n请点顶部「⚙ 字段映射」补上对应列。",
             )
             return False
+        if not self.app.require_types_ready("rfm"):
+            return False
         return True
 
     def _on_analyze_all(self):

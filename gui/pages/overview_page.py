@@ -1,7 +1,8 @@
 """图表总览页 —— 报告浏览器（customtkinter 版本）。"""
 
+import os
 import shutil
-from pathlib import Path
+import subprocess
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -17,7 +18,6 @@ from analyzer.sales_trend import (
     get_weekday_hour_orders,
     get_month_orders,
 )
-from visualization.visualizer import Visualizer
 from gui.error_messages import show_friendly_error
 from gui.pages.base_page import BasePage
 from gui.widgets import (
@@ -108,6 +108,8 @@ class OverviewPage(BasePage):
         self.chart_title_var = ctk.StringVar(value="图表预览")
         self.selected_var = ctk.StringVar(value="尚未选择图表")
         self.explain_var = ctk.StringVar(value="先生成图表，再从右侧目录选择一张查看。")
+        self.path_link_var = ctk.StringVar(value="")
+        self._current_chart_path = None
         self._build_body()
 
     def _build_body(self):
@@ -141,7 +143,7 @@ class OverviewPage(BasePage):
             ("已生成图表", "generated", COLORS["blue"]),
             ("当前选择", "selected", COLORS["purple"]),
             ("数据状态", "data_state", COLORS["green"]),
-            ("输出目录", "output", COLORS["amber"]),
+            ("图片文件夹", "output", COLORS["amber"]),
         ]
         for col, (title, key, accent) in enumerate(specs):
             value_var = ctk.StringVar(value="--")
@@ -348,7 +350,21 @@ class OverviewPage(BasePage):
             justify="left",
             anchor="nw",
             wraplength=260,
-        ).grid(row=2, column=0, sticky="nsew", padx=14, pady=(0, 14))
+        ).grid(row=2, column=0, sticky="nsew", padx=14, pady=(0, 6))
+
+        # 路径单独成一个可点击链接：点它在资源管理器中定位该图片
+        self.path_link = ctk.CTkLabel(
+            panel,
+            textvariable=self.path_link_var,
+            font=("SimHei", 11, "underline"),
+            text_color=COLORS["blue"],
+            justify="left",
+            anchor="nw",
+            wraplength=260,
+            cursor="hand2",
+        )
+        self.path_link.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 14))
+        self.path_link.bind("<Button-1>", lambda event: self._open_chart_location())
 
     def on_show(self):
         super().on_show()
@@ -373,6 +389,8 @@ class OverviewPage(BasePage):
                 f"「图表总览」要生成全部图表还需要：{names}\n请点顶部「⚙ 字段映射」补上对应列。",
             )
             return False
+        if not self.app.require_types_ready("overview"):
+            return False
         if self.app.rfm_df is None or "Label" not in self.app.rfm_df.columns:
             messagebox.showwarning(
                 "数据未准备",
@@ -382,12 +400,18 @@ class OverviewPage(BasePage):
         return True
 
     def _get_visualizer(self):
-        if self.app.visualizer is None:
-            self.app.visualizer = Visualizer()
-        return self.app.visualizer
+        return self.app.get_visualizer()
+
+    def _chart_path(self, filename):
+        """Return the current dataset's chart image path."""
+        return self.app.output_picture_dir() / filename
+
+    def _output_dir_label(self):
+        """Return a compact relative label for the current picture folder."""
+        return f"output/{self.app.output_picture_dir().name}"
 
     def _on_generate_all(self):
-        """一键生成全部 9 张图表（保存到 output/ 目录）并刷新状态与预览。"""
+        """一键生成全部 9 张图表并保存到当前数据集的图片文件夹。"""
         if not self._ensure_data():
             return
         viz = self._get_visualizer()
@@ -412,15 +436,15 @@ class OverviewPage(BasePage):
         self._refresh_chart_status()
         self._refresh_nav_state()
         self._show_chart(0)
-        self.app.set_status(f"{len(CHARTS)} 张图全部生成完成（output/ 目录）")
+        self.app.set_status(f"{len(CHARTS)} 张图全部生成完成（{self._output_dir_label()}）")
 
     def _show_chart(self, index):
         name, fname, title, explanation = CHARTS[index]
-        path = Path("output") / fname
+        path = self._chart_path(fname)
         if not path.exists():
             messagebox.showinfo(
                 "图未生成",
-                f"图【{name}】尚未生成。\n请先点【生成全部图表】。",
+                f"图【{name}】尚未生成。\n请先点【生成全部图表】，图片会保存到当前数据对应的文件夹。",
             )
             return
         try:
@@ -443,8 +467,26 @@ class OverviewPage(BasePage):
         self.current_index = index
         self.chart_title_var.set(title)
         self.selected_var.set(f"当前选中：{name}")
-        self.explain_var.set(f"{explanation}\n\n文件：{path}")
+        self.explain_var.set(explanation)
+        self._current_chart_path = path
+        self.path_link_var.set(f"📂 点此打开图片位置：{path}")
         self._set_metric("selected", name, "当前预览")
+
+    def _open_chart_location(self):
+        """点击路径链接：在系统文件资源管理器中定位并选中当前预览的图片。"""
+        path = self._current_chart_path
+        if path is None or not path.exists():
+            messagebox.showinfo("文件不存在", "请先点【生成全部图表】生成该图。")
+            return
+        target = os.path.normpath(str(path))
+        try:
+            # Windows：打开资源管理器并选中该文件（explorer 成功时也可能返回非 0，不作判断）
+            subprocess.run(["explorer", "/select," + target])
+        except Exception:
+            try:
+                os.startfile(os.path.dirname(target))
+            except Exception as e:
+                show_friendly_error("无法打开位置", e, "在文件管理器中定位图片", parent=self)
 
     def _on_export(self):
         """导出选中图到用户指定位置。"""
@@ -452,7 +494,7 @@ class OverviewPage(BasePage):
             messagebox.showwarning("未选择", "请先从右侧图表目录选中一张图。")
             return
         name, fname, _, _ = CHARTS[self.current_index]
-        src = Path("output") / fname
+        src = self._chart_path(fname)
         if not src.exists():
             messagebox.showwarning("图未生成", "当前图表文件不存在，请重新生成。")
             return
@@ -488,24 +530,24 @@ class OverviewPage(BasePage):
         old_index = self.current_index
         if 0 <= old_index < len(self.chart_buttons):
             _, old_fname, _, _ = CHARTS[old_index]
-            old_generated = (Path("output") / old_fname).exists()
+            old_generated = self._chart_path(old_fname).exists()
             self.chart_buttons[old_index].set_generated(old_generated, selected=False)
         if 0 <= new_index < len(self.chart_buttons):
             _, new_fname, _, _ = CHARTS[new_index]
-            new_generated = (Path("output") / new_fname).exists()
+            new_generated = self._chart_path(new_fname).exists()
             self.chart_buttons[new_index].set_generated(new_generated, selected=True)
 
     def _refresh_chart_status(self):
         generated_count = 0
         for index, (_, fname, _, _) in enumerate(CHARTS):
-            generated = (Path("output") / fname).exists()
+            generated = self._chart_path(fname).exists()
             if generated:
                 generated_count += 1
             selected = index == self.current_index
             if index < len(self.chart_buttons):
                 self.chart_buttons[index].set_generated(generated, selected=selected)
 
-        self._set_metric("generated", f"{generated_count}/{len(CHARTS)}", "output 目录")
+        self._set_metric("generated", f"{generated_count}/{len(CHARTS)}", "当前文件夹")
         if self.current_index >= 0:
             self._set_metric("selected", CHARTS[self.current_index][0], "当前预览")
         else:
@@ -518,7 +560,7 @@ class OverviewPage(BasePage):
             and "Label" in self.app.rfm_df.columns
         )
         self._set_metric("data_state", "已就绪" if data_ready else "待准备", "清洗 + RFM")
-        self._set_metric("output", "output/", "PNG 文件")
+        self._set_metric("output", self._output_dir_label(), "PNG 文件夹")
 
     def _refresh_nav_state(self):
         refresh_workflow_nav(self.nav_items, self.app, "图表总览")

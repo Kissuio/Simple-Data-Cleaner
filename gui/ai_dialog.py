@@ -269,15 +269,16 @@ class AIDialog(ctk.CTkToplevel):
 
         # 确定图片列表
         if self.source_var.get() == "all8":
+            output_dir = self.app.output_picture_dir()
             images = [
-                (name, f"output/{fname}")
+                (name, str(output_dir / fname))
                 for name, fname in CHARTS
-                if Path(f"output/{fname}").exists()
+                if (output_dir / fname).exists()
             ]
             if not images:
                 messagebox.showwarning(
                     "9 张图未生成",
-                    "请先在【图表总览】点【一键生成所有 9 张图】。",
+                    "请先在【图表总览】点【生成全部图表】，系统会把图片保存到当前数据对应的输出文件夹。",
                 )
                 return
         else:

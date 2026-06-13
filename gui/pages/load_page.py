@@ -309,7 +309,7 @@ class LoadPage(BasePage):
             text=(
                 "加载成功后会自动清空旧的清洗结果和 RFM 结果，避免不同数据文件之间互相污染。"
                 "本系统保留你表格的原始列名直接清洗；进入分析（RFM / 销售 / 商品 / 总览）时，"
-                "会弹出字段映射窗口、自动猜好列对应（如「会员卡号」→ CustomerID），猜错可手动调整——"
+                "会弹出字段映射窗口、自动匹配列对应并填入默认值（如「会员卡号」→ CustomerID），默认值有误可手动调整——"
                 "因此不同商家、不同列名的交易表都能分析。"
             ),
             font=("SimHei", 12),
@@ -387,9 +387,18 @@ class LoadPage(BasePage):
         )
 
     def on_show(self):
-        """进入本页时刷新左侧流程状态。"""
+        """进入本页时刷新左侧流程状态，并按当前已加载数据重绘预览/指标/字段识别。
+
+        注意：真正渲染预览表、指标和字段识别的是 `_refresh_loaded_state`，它原本只在
+        「选择文件」回调里被调用。若不在这里同步，两种情况都会显示空白：
+        ① 新手带练直接写入 `app.loader` 后切到本页；② 加载完切去别页再切回本页。
+        因此只要当前已有数据，就在进入本页时重绘一次。
+        """
         super().on_show()
         self._refresh_nav_state()
+        loader = getattr(self.app, "loader", None)
+        if loader is not None and getattr(loader, "df", None) is not None:
+            self._refresh_loaded_state(loader)
 
     def _refresh_loaded_state(self, loader):
         df = loader.df

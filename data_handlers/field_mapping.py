@@ -2,7 +2,7 @@
 
 方案 B：标准化推迟到「进入分析前」才做——加载、清洗阶段都用原始列名自由操作，
 进入 RFM/销售/商品分析时才把列对应到标准字段。本模块提供两个纯函数：
-- guess_mapping(columns)        —— 按列名猜每个标准字段对应哪一列（同名/别名/模糊）
+- guess_mapping(columns)        —— 按列名为每个标准字段匹配对应列、给默认值（同名/别名/模糊）
 - apply_field_mapping(df, m)     —— 按映射生成标准列，并按需派生 TotalPrice
 
 不依赖任何实例状态，便于在「清洗后的 df」上直接调用。
@@ -33,6 +33,7 @@ STANDARD_FIELDS = [
 
 # 标准字段 → 中文名（提示用），从 STANDARD_FIELDS 派生
 FIELD_CN = {std: cn for std, cn, _ in STANDARD_FIELDS}
+FIELD_CN["StockCode|Description"] = "商品编码或商品名称"
 
 # 标准字段 → 用途标注（映射界面逐字段显示「这列给哪个分析用」，让用户一眼看清
 # 做 RFM / 销售 / 商品 各需要映射哪些列，而非只看笼统的必需/可选）。
@@ -43,29 +44,42 @@ FIELD_USAGE = {
     "TotalPrice":  "RFM / 销售 / 商品 金额（缺则按 数量×单价 自动算）",
     "Quantity":    "商品分析销量 · 也用于合成金额",
     "UnitPrice":   "商品分析单价 · 也用于合成金额",
-    "Description": "商品分析 · 商品名称",
-    "StockCode":   "商品分析 · 商品编码",
+    "Description": "商品分析 · 商品名称（与商品编码二选一即可）",
+    "StockCode":   "商品分析 · 商品编码（与商品名称二选一即可）",
     "Country":     "可选 · 仅地域筛选用",
 }
 
 # 各分析「真正用到」的标准列（软门禁按此逐页校验）。
 # 注意：这里列 TotalPrice 即可——它在 apply_field_mapping 里会由「数量×单价」自动派生，
 # 故只要映射了金额或数量+单价，get_active_df 输出就含 TotalPrice。
+# 元组项表示「其中之一即可」（去固化）：如商品分析的「商品编码 或 商品名称」，
+# 二者有一个就够（编码用于精确分组、名称可兼作分组键与标签），全缺才算缺。
 ANALYSIS_REQUIRED = {
     "rfm":     ["CustomerID", "InvoiceNo", "InvoiceDate", "TotalPrice"],
     "sales":   ["InvoiceNo", "InvoiceDate", "TotalPrice"],
-    "product": ["TotalPrice", "Quantity", "UnitPrice", "StockCode"],
+    "product": ["TotalPrice", "Quantity", "UnitPrice", ("StockCode", "Description")],
     "overview": ["CustomerID", "InvoiceNo", "InvoiceDate", "TotalPrice",
-                 "Quantity", "UnitPrice", "StockCode"],
+                 "Quantity", "UnitPrice", ("StockCode", "Description")],
 }
 
 
 def missing_required_fields(columns, kind):
-    """给定（映射后）列名与分析类型，返回该分析还缺哪些标准列。"""
-    have = set(columns)
-    return [c for c in ANALYSIS_REQUIRED.get(kind, []) if c not in have]
+    """给定（映射后）列名与分析类型，返回该分析还缺哪些标准列。
 
-# 标准字段 → 常见别名（中英混合），仅用于「自动猜测」给默认值，不强制
+    列表项为元组时表示「其中之一即可」：全部不在才算缺，缺则返回 "A|B" 形式，
+    便于界面提示成“商品编码或商品名称”，而不是误导用户以为必须有编码。
+    """
+    have = set(columns)
+    missing = []
+    for c in ANALYSIS_REQUIRED.get(kind, []):
+        if isinstance(c, tuple):
+            if not any(x in have for x in c):
+                missing.append("|".join(c))
+        elif c not in have:
+            missing.append(c)
+    return missing
+
+# 标准字段 → 常见别名（中英混合），仅用于「自动匹配」给默认值，不强制
 COLUMN_ALIASES = {
     "InvoiceNo":  ["Invoice", "订单号", "订单编号", "发票号", "单号", "OrderID", "Order ID", "Order No"],
     "StockCode":  ["Stock Code", "商品编码", "商品编号", "货号", "SKU", "SKU ID", "商品ID", "ProductID", "Product ID", "Item Code"],
@@ -82,14 +96,14 @@ COLUMN_ALIASES = {
 
 
 def guess_mapping(columns):
-    """为每个标准字段，在给定列名里猜一个最可能的列（同名 > 别名 > 模糊包含）。
+    """为每个标准字段，在给定列名里匹配一个最可能的列作为默认值（同名 > 别名 > 模糊包含）。
 
     已被占用的实际列不再分给其他字段，避免一列同时映射到多个标准字段。
 
     参数:
         columns: 可迭代的实际列名（如清洗后 df.columns）
     返回:
-        dict[str, str | None]: {标准字段: 猜中的实际列名 or None}
+        dict[str, str | None]: {标准字段: 匹配到的实际列名 or None}
     """
     # 常见导出系统会把同一个字段写成 Order ID、order_ID 或 order-id。
     norm = lambda s: re.sub(r"[\s_-]+", "", str(s).strip().lower())
@@ -115,7 +129,7 @@ def guess_mapping(columns):
                 used.add(col)
                 break
 
-    # 模糊包含（兜底，只补还没猜到的）
+    # 模糊包含（兜底，只补还没匹配到的）
     for std in targets:
         if guess[std]:
             continue

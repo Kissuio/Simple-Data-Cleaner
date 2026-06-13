@@ -5,7 +5,7 @@
 - 加载、清洗阶段都用原始列名自由操作；进入分析（RFM / 销售 / 商品 / 总览）前，
   把分析需要的标准字段逐一列出，每个给一个下拉，让用户从清洗后表的实际列里
   指认对应关系（如「会员卡号」→ CustomerID）；
-- 下拉默认值由 field_mapping.guess_mapping() 自动猜好，多数情况下用户只需确认；
+- 下拉默认值由 field_mapping.guess_mapping() 按列名自动匹配，多数情况下用户只需确认；
 - 每个下拉旁显示选中列的样例值，帮助判断选得对不对。
 
 与旧版的区别（方案 B）：
@@ -65,7 +65,7 @@ class MappingDialog(ctk.CTkToplevel):
         self.configure(fg_color=COLORS["page_bg"])
 
         self.actual_cols = list(df.columns)
-        # 初始建议：优先沿用已有映射，缺的用自动猜测补
+        # 初始默认值：优先沿用已有映射，缺的用自动匹配补
         guessed = guess_mapping(self.actual_cols)
         self.suggestion = {}
         for std, _, _ in STANDARD_FIELDS:
@@ -106,7 +106,7 @@ class MappingDialog(ctk.CTkToplevel):
             head,
             text=(
                 f"当前清洗后数据 {len(self.actual_cols)} 列、{len(self.df):,} 行。"
-                "下拉已自动猜好，多数情况直接点底部「确认映射」即可；猜错的请手动改。"
+                "下拉已按列名自动匹配为默认值，多数情况直接点底部「确认映射」即可；默认值有误的请手动改。"
                 "标「必需」=任何分析都要（客户/订单号/日期）；其余按需映射——"
                 "缺了不挡确认，进入用到它的分析页时会提示补映射。"
                 "金额：映射「销售额」，或同时给「数量」「单价」（自动算销售额），二者至少一种。"
@@ -266,7 +266,7 @@ class MappingDialog(ctk.CTkToplevel):
         return f"样例：{series.iloc[0]}"
 
     def _reset_to_guess(self):
-        """把所有下拉恢复成自动猜测的建议值。"""
+        """把所有下拉恢复成自动匹配的默认值。"""
         for std, var in self.menus.items():
             value = self.suggestion.get(std) or NO_MAP
             var.set(value)

@@ -95,6 +95,7 @@ class FilterStateTests(unittest.TestCase):
         app.cleaner = SimpleNamespace(df=frame)
         app.field_mapping = None
         app.mapping_intro_seen = False
+        app.guided_mode_var = SimpleNamespace(get=lambda: True)
 
         with (
             patch("gui.intro_dialog.IntroDialog") as intro_dialog,
