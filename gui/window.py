@@ -25,10 +25,87 @@
     customtkinter 提供圆角、阴影、统一字体、亮/暗模式等现代视觉。
 """
 
+from pathlib import Path
+
 import customtkinter as ctk
 import pandas as pd
 
-from gui.widgets import UI_COLORS as COLORS, make_chart_progress
+from gui.widgets import UI_COLORS as COLORS, chart_group_complete, make_chart_progress
+from gui.output_paths import dataset_output_picture_dir
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+TEACHER_DEMO_DATA_PATH = PROJECT_ROOT / "data" / "online_retail" / "Online Retail.csv"
+TEACHER_QUICK_DEMO_TITLE = "教师快速查阅说明"
+TEACHER_QUICK_DEMO_GUIDE = """尊敬的老师，您好：
+
+我们设置这个入口，并不是希望替代完整的操作流程，而是考虑到最后验收时，
+您可能更希望先直接查看系统最终生成的可视化图像。因此，该按钮会使用内置
+Online Retail 数据集，自动建立一份演示状态，并跳转到图表预览页面，
+便于您快速检查系统的图像生成结果和分析展示效果。
+
+点击「知道了，开始」后，系统会为您快速跳过以下人工操作步骤：
+
+1. 加载数据
+   自动读取项目内置的 Online Retail 主数据集：
+   data/online_retail/Online Retail.csv
+
+2. 数据清洗
+   自动执行一组适合该数据集的演示清洗：
+   · 删除完全重复行
+   · 删除关键 RFM 字段为空的记录
+   · 清理取消订单及其配对正单
+   · 删除数量 ≤ 0、单价 ≤ 0 的异常记录
+   · 将交易时间列转换为日期类型
+
+3. 字段映射
+   自动确认客户、订单、日期、数量、单价、商品、国家等标准字段。
+   其中销售额会根据 Quantity × UnitPrice 自动派生。
+
+4. RFM 分析
+   自动完成 R / F / M 计算、均值打分，并生成 8 类客户标签。
+
+5. 图表生成与预览
+   自动生成图表总览页的 9 张 PNG 图，并跳转到「图表总览」打开第一张图。
+
+完成后，页面中将呈现：
+· 清洗后的 Online Retail 数据状态
+· RFM 客户分群结果
+· 图表总览中的 9 张可视化图像
+· 可继续切换查看的销售、商品与客户分群相关图像
+
+需要说明的是，该入口不会修改原始数据文件，只是在程序运行过程中建立一份
+用于快速查阅的演示状态。若需要考察完整交互流程，仍建议按照左侧 6 个步骤
+依次操作。
+"""
+TEACHER_QUICK_DEMO_REMINDER = "尊敬的老师，可点击「教师快速查阅」直接查看图表预览结果。"
+TEACHER_STARTUP_NOTICE_TITLE = "教师查阅提示"
+TEACHER_STARTUP_NOTICE = """尊敬的老师，您好：
+
+本系统在主页右上角提供了两个查阅入口，您可按需选择：
+
+· 紫色按钮「教师快速查阅」：使用内置 Online Retail 数据集，自动跑完加载、清洗、字段映射、RFM 分析与图表生成，并直接跳转到「图表总览」，便于您先快速查看系统最终产出的图表结果。
+
+· 绿色按钮「新手带练」：使用内置示例数据，在真实页面里一步步带您亲手完成「加载→清洗→映射→RFM→销售→商品→总览」全流程，每一步都会检验是否做到，便于您考察更贴近真实业务数据的完整交互与对不同数据的适配能力。
+
+该提醒仅用于说明入口位置，不会在关闭弹窗后自动开始任何演示。"""
+TEACHER_QUICK_DEMO_DONE_TITLE = "教师快速查阅已完成"
+TEACHER_QUICK_DEMO_DONE_NOTICE = """尊敬的老师，您好：
+
+系统已通过「教师快速查阅」入口完成 Online Retail 数据的加载、演示清洗、字段映射、RFM 分析与 9 张图表生成，并已跳转到「图表总览」页面。
+
+在这一页，您可以通过右侧图表目录逐张查看可视化结果，也可以使用「导出此图」保存当前图像，或点击「AI 解读」生成面向报告展示的文字解释。
+
+查阅完本页后，请您记得点击左上角「← 返回主页」。主页会集中呈现本次演示的最终状态、流程完成情况与图表预览，便于您从完整项目视角继续查看。"""
+TEACHER_QUICK_DEMO_HOME_TITLE = "可以继续体验完整流程"
+TEACHER_QUICK_DEMO_HOME_NOTICE = """尊敬的老师，您好：
+
+您已经回到主页。刚才的「教师快速查阅」主要用于让您先看到一次完整产出结果；接下来，您可以从主页选择「加载数据」，选取新的数据文件，亲手体验更完整的数据清洗与分析流程；若希望有人逐步带着操作，也可点绿色按钮「📘 新手带练」，它会用内置示例数据带您一步步走完全流程。
+
+如果希望进一步查看项目设计，请重点观察：数据清洗区是一组可根据数据特征自由组合的工具，执行哪几样、按什么顺序都由您决定；字段映射会决定后续 RFM 与图表分析的口径；图表总览则用于统一查看、导出和解读最终结果。
+
+完成新的数据加载后，您可以根据数据状态选择进入「数据清洗」「RFM 分析」「销售分析」「商品分析」与「图表总览」等模块，继续考察系统在不同数据上的适配能力。"""
+STARTUP_STATUS_TEXT = "就绪 - 请选择主页上的「加载数据」开始"
 
 
 RFM_MAPPING_GUIDE = """一、RFM 是什么
@@ -91,6 +168,10 @@ def make_data_filter():
     return {"date_from": None, "date_to": None, "country": None}
 
 
+# 需要字段映射 + 顶部筛选/摘要条的分析页
+ANALYSIS_PAGES = {"RFM 分析", "销售分析", "商品分析", "图表总览"}
+
+
 class App(ctk.CTk):
     """主应用窗口（继承 customtkinter.CTk 而非 tk.Tk）。
 
@@ -142,6 +223,8 @@ class App(ctk.CTk):
         # color_theme:     "blue" / "green" / "dark-blue"——用户选 blue（与 hover 蓝边框统一）
         ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("blue")
+        # 整体放大界面（含字号），回应「字太小」的反馈；试验值，可调
+        ctk.set_widget_scaling(1.12)
 
         super().__init__()
         self.title("RFM 客户分群分析系统")
@@ -169,9 +252,22 @@ class App(ctk.CTk):
         self.mapping_intro_seen = False
         # 每份新数据首次进入清洗页展示一次工具箱说明。
         self.cleaning_intro_seen = False
+        # 过程自动提示开关（恒为关）：关=用自己数据时不自动弹清洗/映射说明，
+        # 界面清爽。新手教学改由主页「新手带练」用示例数据一步步带练承载；
+        # 清洗页/映射窗里的手动「说明」按钮仍可随时点开。保留此变量供软门禁复用。
+        self.guided_mode_var = ctk.BooleanVar(value=False)
+        # 启动提示每次打开程序只展示一次，与教师快速通道本身分开。
+        self.teacher_startup_notice_seen = False
+        # 只有从主页右上角紫色按钮进入的自动演示，成功到达图表总览后才消费这个提醒。
+        self.teacher_quick_demo_completion_notice_pending = False
+        # 只有教师快速通道成功进入图表总览后，下一次回到主页才弹出后续手册提醒。
+        self.teacher_quick_demo_home_notice_pending = False
 
         # ───── 状态栏文本（子页面调 self.app.set_status("...") 更新） ─────
-        self.status_var = ctk.StringVar(value="就绪 - 请选择主页上的「加载数据」开始")
+        self.status_var = ctk.StringVar(value=STARTUP_STATUS_TEXT)
+        # 分析页顶部「映射摘要条」文本：显示当前文件 / 行数 / 关键字段映射，
+        # 便于一眼核对「金额」等是否接错列（防止把销售额错映射到商品编码等数字列）。
+        self.mapping_summary_var = ctk.StringVar(value="")
 
         # ───── 当前显示的页面 + 全部页面字典 ─────
         self.current_page = None
@@ -203,6 +299,18 @@ class App(ctk.CTk):
         from gui.filter_bar import FilterBar
         self.filter_bar = FilterBar(self, app=self)
 
+        # ───── 映射摘要条（单实例，仅分析页且已映射时显示，由 _refresh_top_bars 控制）─────
+        self.mapping_bar = ctk.CTkLabel(
+            self,
+            textvariable=self.mapping_summary_var,
+            fg_color=COLORS["blue_soft"],
+            text_color=COLORS["text"],
+            font=("SimHei", 11),
+            anchor="w",
+            corner_radius=0,
+            height=26,
+        )
+
         # ───── 中间页面容器 ─────
         # fg_color=transparent 让 container 跟随窗口默认色（light 模式下浅冷白）
         self.container = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
@@ -232,6 +340,7 @@ class App(ctk.CTk):
 
         # 默认显示主页（仪表盘）
         self.show_page("主页")
+        self.after(500, self.show_teacher_startup_notice)
 
     def show_page(self, label):
         """切换到指定页面，并触发 on_show 钩子。
@@ -239,34 +348,306 @@ class App(ctk.CTk):
         on_show 由 BasePage 提供：检查前置条件并刷新提示横幅。
         HomePage 也定义了空 on_show，所以这里不用判断类型直接调。
         """
+        previous_label = self.current_label
+        target = self.pages[label]
+        show_teacher_home_notice = self.should_show_teacher_quick_demo_home_notice(previous_label, label)
+
         if self.current_page is not None:
             self.current_page.pack_forget()
 
-        target = self.pages[label]
         target.pack(fill="both", expand=True)
         self.current_page = target
         self.current_label = label
 
         target.on_show()
 
-        # 仅分析页、且已清洗 + 已做字段映射时显示全局筛选栏；其余页隐藏。
-        # 方案 B：映射后 get_active_df 才有 InvoiceDate / Country 等标准列供筛选，
-        # 未映射时筛选栏没有可用候选，故一并隐藏。
-        analysis_pages = {"RFM 分析", "销售分析", "商品分析", "图表总览"}
-        if label in analysis_pages and self.is_mapped():
-            self.filter_bar.refresh_options()
-            self.filter_bar.show()
-        else:
-            self.filter_bar.hide()
+        # 顶部条（映射摘要 + 全局筛选）：仅分析页且已映射时显示
+        self._refresh_top_bars()
 
         # 方案 B：进入分析页时若已清洗但尚未映射字段，弹出字段映射对话框。
-        # 放在 on_show / 筛选栏之后，让页面先以「等待映射」状态铺好，再叠加模态弹窗。
-        if label in analysis_pages and self.needs_mapping():
+        # 放在 on_show / 顶部条之后，让页面先以「等待映射」状态铺好，再叠加模态弹窗。
+        if label in ANALYSIS_PAGES and self.needs_mapping():
             self.open_field_mapping()
+
+        if show_teacher_home_notice:
+            self.after(120, self.show_teacher_quick_demo_home_notice)
 
     def set_status(self, text):
         """统一更新底部状态栏文字。子页面调它。"""
         self.status_var.set(text)
+
+    def output_picture_dir(self):
+        """返回当前数据集对应的图表输出文件夹。"""
+        file_path = getattr(self.loader, "file_path", None) if self.loader is not None else None
+        return dataset_output_picture_dir(file_path, base_dir=PROJECT_ROOT / "output")
+
+    def get_visualizer(self):
+        """返回写入当前数据集专属图片文件夹的 Visualizer。"""
+        from visualization.visualizer import Visualizer
+
+        output_dir = self.output_picture_dir()
+        current_dir = getattr(self.visualizer, "output_dir", None)
+        if self.visualizer is None or Path(current_dir) != output_dir:
+            self.visualizer = Visualizer(output_dir=output_dir)
+        return self.visualizer
+
+    def start_guided_tour(self):
+        """新手带练：用内置示例数据，在真实页面上一步步带着走完整流程。
+
+        与「教师快速查阅」（一键自动跑完只看结果）不同，这里逐步停下来讲解、
+        由用户点「执行这一步」推进，面向第一次使用的学生。
+        """
+        from gui.guided_tour import GuidedTour
+
+        # 已经打开则置前，不重复开
+        existing = getattr(self, "_guided_tour", None)
+        if existing is not None and existing.winfo_exists():
+            existing.lift()
+            existing.focus_force()
+            return
+        self._guided_tour = GuidedTour(self)
+
+    def show_teacher_startup_notice(self):
+        """启动时提示教师先体验快速查阅入口，但不自动执行演示。"""
+        if self.teacher_startup_notice_seen:
+            return
+        self.teacher_startup_notice_seen = True
+
+        from gui.intro_dialog import IntroDialog
+
+        IntroDialog(
+            self,
+            title=TEACHER_STARTUP_NOTICE_TITLE,
+            body=TEACHER_STARTUP_NOTICE,
+            button_text="我知道了",
+        )
+
+    def mark_teacher_quick_demo_from_purple_entry(self):
+        """记录教师快速查阅由主页紫色入口启动。"""
+        self.teacher_startup_notice_seen = True
+        self.teacher_quick_demo_completion_notice_pending = True
+        self.teacher_quick_demo_home_notice_pending = False
+
+    def should_show_teacher_quick_demo_completion_notice(self):
+        """若教师快速查阅完成提醒处于待显示状态，则消费并返回 True。"""
+        if not self.teacher_quick_demo_completion_notice_pending:
+            return False
+        self.teacher_quick_demo_completion_notice_pending = False
+        return True
+
+    def cancel_teacher_quick_demo_completion_notice(self):
+        """取消教师快速查阅完成提醒，避免失败流程后残留弹窗状态。"""
+        self.teacher_quick_demo_completion_notice_pending = False
+        self.teacher_quick_demo_home_notice_pending = False
+
+    def show_teacher_quick_demo_completion_notice(self):
+        """教师快速查阅成功到达图表总览后，提醒教师本页用途与返回主页。"""
+        if not self.should_show_teacher_quick_demo_completion_notice():
+            return
+        self.teacher_quick_demo_home_notice_pending = True
+
+        from gui.intro_dialog import IntroDialog
+
+        IntroDialog(
+            self,
+            title=TEACHER_QUICK_DEMO_DONE_TITLE,
+            body=TEACHER_QUICK_DEMO_DONE_NOTICE,
+            button_text="知道了，继续查看",
+        )
+
+    def should_show_teacher_quick_demo_home_notice(self, previous_label, next_label):
+        """仅在教师快速通道完成后，第一次从非主页回到主页时消费后续提醒。"""
+        if not self.teacher_quick_demo_home_notice_pending:
+            return False
+        if previous_label not in (None, "主页") and next_label == "主页":
+            self.teacher_quick_demo_home_notice_pending = False
+            return True
+        return False
+
+    def show_teacher_quick_demo_home_notice(self):
+        """教师快速通道完成后回到主页，提示继续按手册选择数据分析。"""
+        from gui.intro_dialog import IntroDialog
+
+        IntroDialog(
+            self,
+            title=TEACHER_QUICK_DEMO_HOME_TITLE,
+            body=TEACHER_QUICK_DEMO_HOME_NOTICE,
+            on_close=self.reset_teacher_quick_demo_state_for_manual_start,
+            button_text="知道了，继续体验",
+        )
+
+    def reset_teacher_quick_demo_state_for_manual_start(self):
+        """关闭教师通道最终提示后，清空演示流程占用的内存状态。"""
+        self.loader = None
+        self.cleaner = None
+        self.rfm_analyzer = None
+        self.rfm_df = None
+        self.visualizer = None
+        self.cleaning_history = []
+        self.chart_progress = make_chart_progress()
+        self.reset_data_filter()
+        self.field_mapping = None
+        self.mapping_intro_seen = False
+        self.cleaning_intro_seen = False
+        self.teacher_quick_demo_completion_notice_pending = False
+        self.teacher_quick_demo_home_notice_pending = False
+
+        if "mapping_summary_var" in self.__dict__:
+            self.mapping_summary_var.set("")
+        refresh_top_bars = getattr(self, "_refresh_top_bars", None)
+        if callable(refresh_top_bars):
+            refresh_top_bars()
+        current_page = getattr(self, "current_page", None)
+        if current_page is not None:
+            current_page.on_show()
+        set_status = getattr(self, "set_status", None)
+        if callable(set_status):
+            set_status(STARTUP_STATUS_TEXT)
+
+    def open_teacher_quick_demo_intro(self):
+        """打开教师快速查阅说明；用户确认后自动跑完整演示流程。"""
+        self.mark_teacher_quick_demo_from_purple_entry()
+
+        from gui.intro_dialog import IntroDialog
+
+        IntroDialog(
+            self,
+            title=TEACHER_QUICK_DEMO_TITLE,
+            body=TEACHER_QUICK_DEMO_GUIDE,
+            on_close=self.run_teacher_quick_demo,
+        )
+
+    def run_teacher_quick_demo(self):
+        """加载 Online Retail，自动清洗、映射、RFM、生成图表并跳到总览页。"""
+        from tkinter import messagebox
+
+        from analyzer.rfm_analyzer import RFMAnalyzer
+        from data_handlers.data_cleaner import DataCleaner
+        from data_handlers.field_mapping import guess_mapping
+        from data_handlers.file_loader import FileLoader
+        from gui.error_messages import show_friendly_error
+
+        path = TEACHER_DEMO_DATA_PATH
+        if not path.exists():
+            self.cancel_teacher_quick_demo_completion_notice()
+            messagebox.showwarning(
+                "演示数据不存在",
+                f"未找到教师快速查阅使用的数据文件：\n{path}\n\n"
+                "请先确认 data/online_retail/Online Retail.csv 是否存在。",
+                parent=self,
+            )
+            return
+
+        try:
+            self.set_status("教师快速查阅：正在加载 Online Retail 数据...")
+            self.update_idletasks()
+
+            loader = FileLoader(str(path))
+            loader.load_file()
+
+            self.loader = loader
+            self.cleaner = None
+            self.rfm_analyzer = None
+            self.rfm_df = None
+            self.visualizer = None
+            self.chart_progress = make_chart_progress()
+            self.reset_data_filter()
+            self.field_mapping = None
+            self.mapping_intro_seen = True
+            self.cleaning_intro_seen = True
+
+            self.set_status("教师快速查阅：正在执行演示清洗...")
+            self.update_idletasks()
+
+            cleaner = DataCleaner(loader.df)
+            cleaner.drop_duplicates()
+            cleaner.drop_missing([
+                "CustomerID",
+                "InvoiceNo",
+                "InvoiceDate",
+                "Quantity",
+                "UnitPrice",
+            ])
+            cleaner.drop_cancellation_pairs(
+                invoice_col="InvoiceNo",
+                customer_col="CustomerID",
+                code_col="StockCode",
+                price_col="UnitPrice",
+                qty_col="Quantity",
+                prefix="C",
+            )
+            cleaner.drop_by_range("Quantity", "<=", 0)
+            cleaner.drop_by_range("UnitPrice", "<=", 0)
+            cleaner.convert_date("InvoiceDate")
+            self.cleaner = cleaner
+
+            self.set_status("教师快速查阅：正在确认字段映射并计算 RFM...")
+            self.update_idletasks()
+
+            self.field_mapping = guess_mapping(cleaner.df.columns)
+            self.rfm_analyzer = RFMAnalyzer(self.get_active_df())
+            self.rfm_df = self.rfm_analyzer.analyze_all()
+
+            self.set_status("教师快速查阅：正在生成 9 张图表...")
+            self.show_page("图表总览")
+            self.update_idletasks()
+            overview = self.pages.get("图表总览")
+            if overview is not None:
+                overview._on_generate_all()
+            if not chart_group_complete(self, "overview"):
+                self.cancel_teacher_quick_demo_completion_notice()
+                self.set_status("教师快速查阅：清洗和 RFM 已完成，但图表未全部生成，请查看提示后重试。")
+                return
+            self.set_status(
+                f"教师快速查阅完成：已清洗 {len(self.cleaner.df):,} 行数据，"
+                f"生成 {len(self.rfm_df):,} 个客户的 RFM 结果，并打开图表总览。"
+            )
+            self.after(100, self.show_teacher_quick_demo_completion_notice)
+        except Exception as e:
+            self.cancel_teacher_quick_demo_completion_notice()
+            show_friendly_error("教师快速查阅失败", e, "自动完成演示流程", parent=self)
+
+    def mapping_summary_text(self):
+        """生成顶部「映射摘要条」文字：当前文件 · 行数 · 客户/订单/日期/金额来源。
+
+        金额来源专门标清——映射对了是「数量×单价(自动)」或某总价列，
+        若误把销售额接到商品编码/订单号等数字列，在这里一眼可见。
+        """
+        if not self.field_mapping or self.cleaner is None or self.cleaner.df is None:
+            return ""
+        m = self.field_mapping
+        fname = "未知文件"
+        if self.loader is not None:
+            path = getattr(self.loader, "file_path", "") or ""
+            fname = path.replace("\\", "/").split("/")[-1] or "未知文件"
+        rows = len(self.cleaner.df)
+        if m.get("TotalPrice"):
+            money = f"金额={m['TotalPrice']}"
+        elif m.get("Quantity") and m.get("UnitPrice"):
+            money = f"金额={m['Quantity']}×{m['UnitPrice']}(自动)"
+        else:
+            money = "金额=未设"
+        return (
+            f"📄 {fname} · {rows:,} 行   ｜   "
+            f"客户={m.get('CustomerID', '-')}   订单={m.get('InvoiceNo', '-')}   "
+            f"日期={m.get('InvoiceDate', '-')}   {money}"
+        )
+
+    def _refresh_top_bars(self):
+        """按「当前页是否分析页 + 是否已映射」显隐顶部的映射摘要条与全局筛选栏。"""
+        if "filter_bar" not in self.__dict__ or "mapping_bar" not in self.__dict__:
+            return
+        if self.current_label in ANALYSIS_PAGES and self.is_mapped():
+            self.filter_bar.refresh_options()
+            self.filter_bar.show()
+            self.mapping_summary_var.set(self.mapping_summary_text())
+            if not self.mapping_bar.winfo_ismapped():
+                # 放在筛选栏上方
+                self.mapping_bar.pack(side="top", fill="x", before=self.filter_bar)
+        else:
+            self.filter_bar.hide()
+            if self.mapping_bar.winfo_ismapped():
+                self.mapping_bar.pack_forget()
 
     # ═══════════════════════════════════════════════════════════════════
     # 字段映射（方案 B：进入分析前才把列对应到标准字段）
@@ -303,8 +684,61 @@ class App(ctk.CTk):
         from data_handlers.field_mapping import ANALYSIS_REQUIRED, missing_required_fields
         df = self.get_active_df()
         if df is None:
-            return list(ANALYSIS_REQUIRED.get(kind, []))
+            # 未映射时返回全部所需字段；元组「其中之一即可」转成 A|B 供中文提示使用。
+            return ["|".join(c) if isinstance(c, tuple) else c
+                    for c in ANALYSIS_REQUIRED.get(kind, [])]
         return missing_required_fields(df.columns, kind)
+
+    # 各分析需要「是数值」的列（日期单独判断）
+    _NUMERIC_NEEDS = {
+        "rfm": ["TotalPrice"],
+        "sales": ["TotalPrice"],
+        "product": ["Quantity", "UnitPrice", "TotalPrice"],
+        "overview": ["Quantity", "UnitPrice", "TotalPrice"],
+    }
+    _DATE_NEEDS = {"rfm", "sales", "overview"}
+
+    def type_guidance(self, kind):
+        """进入某分析前检查关键列类型是否就绪；未就绪返回一段「分步导向」中文提示，否则 None。
+
+        方案 B 下清洗用原始列、类型转换由用户在清洗页手动做。日期还是文本时 RFM/趋势会
+        算不出（报底层错），这里在分析入口提前拦一道，用「去哪点、点什么」的两步指引代替报错。
+        """
+        import pandas as pd
+        df = self.get_active_df()
+        if df is None:
+            return None
+        if kind in self._DATE_NEEDS and "InvoiceDate" in df.columns \
+                and not pd.api.types.is_datetime64_any_dtype(df["InvoiceDate"]):
+            return (
+                "「交易时间」列现在还是文本，时间相关分析无法进行。\n\n"
+                "请按两步处理：\n"
+                "1）打开【数据清洗】页\n"
+                "2）点「转换列类型 …」→ 选「列转日期」→ 选你的交易时间列 → 确认\n\n"
+                "完成后回到本页再点一次即可。"
+            )
+        for col, cn in (("Quantity", "数量"), ("UnitPrice", "单价"), ("TotalPrice", "销售额")):
+            if col in self._NUMERIC_NEEDS.get(kind, []) and col in df.columns \
+                    and not pd.api.types.is_numeric_dtype(df[col]):
+                return (
+                    f"「{cn}」列现在还是文本，金额无法计算。\n\n"
+                    "请按两步处理：\n"
+                    "1）打开【数据清洗】页\n"
+                    "2）点「转换列类型 …」→ 选「列转数值」→ 选相关列 → 确认\n\n"
+                    "完成后回到本页再点一次即可。"
+                )
+        return None
+
+    def require_types_ready(self, kind):
+        """类型就绪则 True；否则弹「分步导向」提示（可一键跳到数据清洗页）并返回 False。"""
+        guide = self.type_guidance(kind)
+        if not guide:
+            return True
+        from tkinter import messagebox
+        go = messagebox.askyesno("需要先转换列类型", guide + "\n\n现在就去【数据清洗】页吗？")
+        if go:
+            self.show_page("数据清洗")
+        return False
 
     def open_field_mapping(self, show_intro=True):
         """打开字段映射；每份数据首次进入时先展示 RFM 使用说明。
@@ -316,7 +750,7 @@ class App(ctk.CTk):
         if self.cleaner is None or self.cleaner.df is None:
             return
 
-        if show_intro and not self.mapping_intro_seen:
+        if show_intro and self.guided_mode_var.get() and not self.mapping_intro_seen:
             from gui.intro_dialog import IntroDialog
             self.mapping_intro_seen = True
             IntroDialog(
@@ -348,11 +782,8 @@ class App(ctk.CTk):
         self.chart_progress = make_chart_progress()
         if self.current_page is not None:
             self.current_page.on_show()
-        # 映射后分析页才需要筛选栏：刷新候选并显示
-        analysis_pages = {"RFM 分析", "销售分析", "商品分析", "图表总览"}
-        if self.current_label in analysis_pages:
-            self.filter_bar.refresh_options()
-            self.filter_bar.show()
+        # 映射后分析页才需要顶部条：刷新映射摘要 + 筛选栏并显示
+        self._refresh_top_bars()
         self.set_status("字段映射已确认，可以开始分析")
 
     def get_active_df(self):

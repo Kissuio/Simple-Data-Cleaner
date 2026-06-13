@@ -2,6 +2,7 @@
 
 import math
 import tkinter as tk
+from tkinter import font as tkfont
 
 import customtkinter as ctk
 
@@ -17,12 +18,70 @@ STEPS = [
     ("06", "图表总览", "9 张图统一浏览 + AI 解读", "图表总览"),
 ]
 
+# 炼金炉右侧只展示不依赖字段名的通用指标：清洗前后表格形状变化。
 ALCHEMY_ROWS = [
-    ("缺失过滤", "missing", COLORS["red"], COLORS["red_soft"]),
-    ("取消订单", "cancel", COLORS["amber"], COLORS["amber_soft"]),
-    ("非商品代码", "non_product", "#7c6aa6", "#f3f0fb"),
-    ("保留率", "retention", COLORS["green"], COLORS["green_soft"]),
+    ("原始行数", "raw_rows", COLORS["blue"], COLORS["blue_soft"], "导入后的总记录"),
+    ("当前行数", "clean_rows", COLORS["green"], COLORS["green_soft"], "清洗后的记录"),
+    ("行数变化", "row_change", COLORS["amber"], COLORS["amber_soft"], "清洗前后净变化"),
+    ("列数变化", "col_change", COLORS["purple"], COLORS["purple_soft"], "字段整理前后变化"),
 ]
+
+
+def alchemy_gauge_font_size(text, size):
+    """Return a gauge value font size that keeps percent text inside the ring."""
+    text = str(text or "")
+    if not text or text == "--":
+        return max(16, min(22, int(size * 0.13)))
+
+    text_units = sum(2 if ord(char) > 127 else 1 for char in text)
+    return max(15, min(22, int(size * 0.62 / max(text_units, 1))))
+
+
+def fit_font_size(text, usable_px, measure, max_size=15, min_size=9):
+    """Return the largest font size in [min_size, max_size] whose rendered width fits.
+
+    measure(text, size) 返回该字号下文本的像素宽度，由调用方注入——GUI 传入基于真实
+    字体(含控件缩放)的测量器，确保「减少 154,361」这类长文本一定不被裁切；测试可注入
+    假的测量器，使本函数保持纯净可测。空文本或宽度无效时回退最大字号。
+    """
+    text = str(text or "")
+    if not text or usable_px <= 1:
+        return max_size
+    size = max_size
+    while size > min_size and measure(text, size) > usable_px:
+        size -= 1
+    return size
+
+
+def alchemy_row_change_text(raw_rows, clean_rows, cleaner_ok):
+    """Return a field-agnostic text summary of row count changes after cleaning."""
+    if not raw_rows:
+        return "--"
+    if not cleaner_ok:
+        return "待清洗"
+
+    delta = int(clean_rows) - int(raw_rows)
+    if delta < 0:
+        return f"减少 {abs(delta):,}"
+    if delta > 0:
+        return f"增加 {delta:,}"
+    return "0"
+
+
+def alchemy_column_change_text(raw_cols, clean_cols, cleaner_ok):
+    """Return a field-agnostic text summary of column count changes after cleaning."""
+    if not raw_cols:
+        return "--"
+    if not cleaner_ok:
+        return "待清洗"
+
+    delta = int(clean_cols) - int(raw_cols)
+    if delta < 0:
+        return f"减少 {abs(delta):,}"
+    if delta > 0:
+        return f"增加 {delta:,}"
+    return "0"
+
 
 SEGMENT_META = [
     ("重要价值客户", "重要价值", COLORS["amber"], COLORS["amber_soft"]),
@@ -104,73 +163,6 @@ class KpiCard(ctk.CTkFrame):
 
     def _on_leave(self, event):
         self.configure(fg_color=COLORS["panel_bg"], border_color=COLORS["border"])
-
-
-class AlchemyRuleIcon(ctk.CTkFrame):
-    """炼金炉规则说明里的小图标。"""
-
-    def __init__(self, parent, icon_key, color, bg):
-        super().__init__(
-            parent,
-            fg_color=bg,
-            corner_radius=8,
-            width=36,
-            height=36,
-        )
-        self.icon_key = icon_key
-        self.color = color
-        self.bg = bg
-        self.grid_propagate(False)
-
-        self.canvas = tk.Canvas(
-            self,
-            width=36,
-            height=36,
-            bg=bg,
-            highlightthickness=0,
-            bd=0,
-        )
-        self.canvas.pack(fill="both", expand=True)
-        self._draw_icon()
-
-    def set_state(self, color, bg):
-        self.color = color
-        self.bg = bg
-        self.configure(fg_color=bg)
-        self.canvas.configure(bg=bg)
-        self._draw_icon()
-
-    def _draw_icon(self):
-        c = self.canvas
-        color = self.color
-        c.delete("all")
-
-        if self.icon_key == "missing":
-            c.create_oval(13, 8, 23, 18, outline=color, width=2)
-            c.create_line(18, 18, 18, 29, fill=color, width=2)
-            c.create_line(12, 24, 24, 24, fill=color, width=2)
-            c.create_line(27, 9, 30, 12, 24, 18, fill=color, width=2)
-        elif self.icon_key == "cancel":
-            c.create_rectangle(9, 9, 27, 27, outline=color, width=2)
-            c.create_line(12, 12, 24, 24, fill=color, width=2)
-            c.create_line(24, 12, 12, 24, fill=color, width=2)
-        elif self.icon_key == "product":
-            c.create_rectangle(10, 14, 26, 28, outline=color, width=2)
-            c.create_line(10, 14, 18, 9, 26, 14, fill=color, width=2)
-            c.create_line(18, 9, 18, 24, fill=color, width=2)
-        elif self.icon_key == "clean":
-            c.create_line(8, 9, 28, 9, 22, 18, 22, 26, 16, 30, 16, 18, 8, 9, fill=color, width=2)
-            c.create_line(11, 14, 25, 14, fill=color, width=2)
-        elif self.icon_key == "analysis":
-            c.create_oval(10, 7, 27, 13, outline=color, width=2)
-            c.create_rectangle(10, 10, 27, 27, outline=color, width=2)
-            c.create_oval(10, 24, 27, 30, outline=color, width=2)
-            c.create_line(21, 20, 24, 23, 30, 16, fill=color, width=2)
-        else:
-            c.create_rectangle(9, 22, 13, 29, fill=color, outline=color)
-            c.create_rectangle(16, 16, 20, 29, fill=color, outline=color)
-            c.create_rectangle(23, 10, 27, 29, fill=color, outline=color)
-            c.create_line(8, 30, 29, 30, fill=color, width=2)
 
 
 class StepIcon(ctk.CTkFrame):
@@ -347,8 +339,8 @@ class HomePage(ctk.CTkFrame):
         self.kpi_cards = {}
         self.step_cards = {}
         self.alchemy_value_vars = {}
-        self.alchemy_note_vars = {}
-        self.alchemy_bars = {}
+        self.alchemy_value_labels = {}
+        self._alchemy_value_sizes = {}
         self.alchemy_gauge_canvas = None
         self.alchemy_gauge_value = 0
         self.alchemy_gauge_text = "--"
@@ -381,7 +373,7 @@ class HomePage(ctk.CTkFrame):
         header.grid_columnconfigure(0, weight=1)
 
         title_block = ctk.CTkFrame(header, fg_color="transparent", corner_radius=0)
-        title_block.grid(row=0, column=0, sticky="w", padx=30, pady=20)
+        title_block.grid(row=0, column=0, sticky="w", padx=(30, 18), pady=20)
 
         ctk.CTkLabel(
             title_block,
@@ -406,7 +398,7 @@ class HomePage(ctk.CTkFrame):
             border_width=BORDER_WIDTH,
             corner_radius=8,
         )
-        status_box.grid(row=0, column=1, sticky="e", padx=30, pady=20)
+        status_box.grid(row=0, column=1, sticky="e", padx=(0, 12), pady=20)
 
         ctk.CTkLabel(
             status_box,
@@ -414,6 +406,62 @@ class HomePage(ctk.CTkFrame):
             font=("SimHei", 11, "bold"),
             text_color=COLORS["blue"],
         ).pack(padx=18, pady=10)
+
+        learn_box = ctk.CTkFrame(
+            header,
+            fg_color=COLORS["green_soft"],
+            border_color=COLORS["green_hover"],
+            border_width=BORDER_WIDTH,
+            corner_radius=8,
+        )
+        learn_box.grid(row=0, column=2, sticky="e", padx=(0, 12), pady=20)
+
+        ctk.CTkLabel(
+            learn_box,
+            text="第一次使用？",
+            font=("SimHei", 10),
+            text_color=COLORS["green"],
+        ).pack(padx=16, pady=(9, 2))
+
+        ctk.CTkButton(
+            learn_box,
+            text="📘 新手带练",
+            command=self.app.start_guided_tour,
+            fg_color=COLORS["green"],
+            hover_color=COLORS["green_hover"],
+            font=("SimHei", 11, "bold"),
+            height=30,
+            width=132,
+            corner_radius=6,
+        ).pack(padx=16, pady=(0, 9))
+
+        teacher_box = ctk.CTkFrame(
+            header,
+            fg_color=COLORS["purple_soft"],
+            border_color=COLORS["purple_hover"],
+            border_width=BORDER_WIDTH,
+            corner_radius=8,
+        )
+        teacher_box.grid(row=0, column=3, sticky="e", padx=(0, 30), pady=20)
+
+        ctk.CTkLabel(
+            teacher_box,
+            text="教师查阅图表",
+            font=("SimHei", 10),
+            text_color=COLORS["purple"],
+        ).pack(padx=16, pady=(9, 2))
+
+        ctk.CTkButton(
+            teacher_box,
+            text="教师快速查阅",
+            command=self.app.open_teacher_quick_demo_intro,
+            fg_color=COLORS["purple"],
+            hover_color=COLORS["purple_hover"],
+            font=("SimHei", 11, "bold"),
+            height=30,
+            width=132,
+            corner_radius=6,
+        ).pack(padx=16, pady=(0, 9))
 
     def _build_content(self):
         content = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
@@ -572,39 +620,7 @@ class HomePage(ctk.CTkFrame):
         content = ctk.CTkFrame(panel, fg_color="transparent", corner_radius=0)
         content.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 20))
         content.grid_columnconfigure(0, weight=1)
-        content.grid_rowconfigure(1, weight=1)
-
-        rules = ctk.CTkFrame(content, fg_color=COLORS["panel_soft"], corner_radius=8)
-        rules.grid(row=0, column=0, sticky="ew")
-        for col in range(3):
-            rules.grid_columnconfigure(col, weight=1, uniform="alchemy_rule")
-
-        rule_specs = [
-            (
-                "识别缺失客户",
-                "CustomerID 为空不进入 RFM",
-                "missing",
-                COLORS["blue"],
-                COLORS["blue_soft"],
-            ),
-            (
-                "剔除取消订单",
-                "C 开头订单及退货记录排除",
-                "cancel",
-                COLORS["amber"],
-                COLORS["amber_soft"],
-            ),
-            (
-                "保留真实商品",
-                "过滤邮费、手续费等非商品代码",
-                "product",
-                COLORS["green"],
-                COLORS["green_soft"],
-            ),
-        ]
-        for col, (title, subtitle, icon_key, color, soft) in enumerate(rule_specs):
-            rule_card = self._make_clean_rule_card(rules, title, subtitle, icon_key, color, soft)
-            rule_card.grid(row=0, column=col, sticky="ew", padx=7, pady=12)
+        content.grid_rowconfigure(0, weight=1)
 
         instrument = ctk.CTkFrame(
             content,
@@ -613,7 +629,7 @@ class HomePage(ctk.CTkFrame):
             border_width=BORDER_WIDTH,
             corner_radius=8,
         )
-        instrument.grid(row=1, column=0, sticky="nsew", pady=(14, 0))
+        instrument.grid(row=0, column=0, sticky="nsew")
         instrument.grid_columnconfigure(0, weight=0, minsize=218)
         instrument.grid_columnconfigure(1, weight=1)
         instrument.grid_rowconfigure(0, weight=1)
@@ -647,54 +663,66 @@ class HomePage(ctk.CTkFrame):
 
         rows = ctk.CTkFrame(instrument, fg_color="transparent", corner_radius=0)
         rows.grid(row=1, column=1, sticky="ew", padx=(8, 18), pady=18)
-        rows.grid_columnconfigure(1, weight=1)
+        for col in range(2):
+            rows.grid_columnconfigure(col, weight=1, uniform="alchemy_metric")
 
-        for row_idx, (title, key, color, soft) in enumerate(ALCHEMY_ROWS[:3]):
-            label = ctk.CTkLabel(
+        for idx, (title, key, color, soft, note) in enumerate(ALCHEMY_ROWS):
+            card = ctk.CTkFrame(
                 rows,
-                text=title,
-                font=("SimHei", 13, "bold"),
-                text_color=COLORS["text"],
-                anchor="w",
-                width=92,
-            )
-            label.grid(row=row_idx, column=0, sticky="w", pady=10)
-
-            bar = ctk.CTkProgressBar(
-                rows,
-                height=12,
-                progress_color=color,
-                fg_color=COLORS["panel_soft"],
+                fg_color="#ffffff",
+                border_color=COLORS["border"],
+                border_width=1,
                 corner_radius=8,
             )
-            bar.set(0)
-            bar.grid(row=row_idx, column=1, sticky="ew", padx=14, pady=10)
-
-            value_var = ctk.StringVar(value="--")
-            note_var = ctk.StringVar(value="等待数据")
-            self.alchemy_value_vars[key] = value_var
-            self.alchemy_note_vars[key] = note_var
-            self.alchemy_bars[key] = bar
+            card.grid(
+                row=idx // 2,
+                column=idx % 2,
+                sticky="ew",
+                padx=(0, 8) if idx % 2 == 0 else (8, 0),
+                pady=(0, 10) if idx < 2 else (0, 0),
+            )
+            card.grid_columnconfigure(0, weight=1)
 
             ctk.CTkLabel(
-                rows,
+                card,
+                text=title,
+                font=("SimHei", 11, "bold"),
+                text_color=COLORS["muted"],
+                anchor="w",
+            ).grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 2))
+
+            value_var = ctk.StringVar(value="--")
+            self.alchemy_value_vars[key] = value_var
+            value_label = ctk.CTkLabel(
+                card,
                 textvariable=value_var,
                 fg_color=soft,
                 text_color=color,
-                font=("Microsoft YaHei UI", 13, "bold"),
+                font=("Microsoft YaHei UI", 15, "bold"),
                 corner_radius=6,
-                width=104,
-                height=32,
-            ).grid(row=row_idx, column=2, sticky="e", pady=8)
+                anchor="center",
+                height=30,
+            )
+            value_label.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 6))
+            self.alchemy_value_labels[key] = value_label
+            value_label.bind("<Configure>", lambda e, k=key: self._fit_alchemy_value(k))
+
+            ctk.CTkLabel(
+                card,
+                text=note,
+                font=("SimHei", 9),
+                text_color=COLORS["muted"],
+                anchor="w",
+            ).grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 10))
 
         ctk.CTkLabel(
             content,
-            text="中心看最终保留率，旁边看过滤原因。",
+            text="保留率 = 清洗后行数 ÷ 原始行数；右侧指标只来自表格行列数量，不依赖任何业务字段。",
             font=("SimHei", 12),
             text_color=COLORS["muted"],
             anchor="w",
             wraplength=480,
-        ).grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        ).grid(row=1, column=0, sticky="ew", pady=(12, 0))
 
     def _build_star_panel(self, parent, column):
         panel = self._make_focus_panel(parent, column)
@@ -758,7 +786,7 @@ class HomePage(ctk.CTkFrame):
             note_var = ctk.StringVar(value="等待 RFM")
             self.star_insight_vars[key] = (value_var, note_var)
             card = self._make_star_insight_card(insights, title, value_var, note_var, accent, soft)
-            card.grid(row=0, column=col, sticky="nsew", padx=(0 if col == 0 else 8, 0))
+            card.grid(row=0, column=col, sticky="new", padx=(0 if col == 0 else 8, 0))
 
     def _make_focus_panel(self, parent, column):
         panel = ctk.CTkFrame(
@@ -795,39 +823,6 @@ class HomePage(ctk.CTkFrame):
             height=32,
         ).grid(row=0, column=1, sticky="e")
 
-    def _make_clean_rule_card(self, parent, title, subtitle, icon_key, accent, soft):
-        card = ctk.CTkFrame(
-            parent,
-            fg_color="#ffffff",
-            border_color=accent,
-            border_width=1,
-            corner_radius=8,
-        )
-        card.grid_columnconfigure(1, weight=1)
-
-        icon = AlchemyRuleIcon(card, icon_key, accent, soft)
-        icon.grid(row=0, column=0, rowspan=2, padx=(12, 9), pady=12)
-
-        ctk.CTkLabel(
-            card,
-            text=title,
-            fg_color=soft,
-            text_color=accent,
-            font=("SimHei", 12, "bold"),
-            corner_radius=6,
-            anchor="w",
-        ).grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=(12, 4))
-
-        ctk.CTkLabel(
-            card,
-            text=subtitle,
-            font=("SimHei", 10),
-            text_color=COLORS["muted"],
-            anchor="w",
-            wraplength=150,
-        ).grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=(0, 12))
-        return card
-
     def _make_star_insight_card(self, parent, title, value_var, note_var, accent, soft):
         card = ctk.CTkFrame(
             parent,
@@ -835,10 +830,12 @@ class HomePage(ctk.CTkFrame):
             border_color=COLORS["border"],
             border_width=BORDER_WIDTH,
             corner_radius=8,
+            height=135,
         )
+        card.grid_propagate(False)  # 固定高度，不被内容或父容器撑高（压扁这三个方块）
         card.grid_columnconfigure(1, weight=1)
         card.grid_rowconfigure(0, weight=0)
-        card.grid_rowconfigure(1, weight=1)
+        card.grid_rowconfigure(1, weight=1)  # 内容行占满剩余高度，便于把数值框垂直居中
 
         ctk.CTkFrame(
             card,
@@ -856,10 +853,11 @@ class HomePage(ctk.CTkFrame):
         ).grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=(9, 1))
 
         content = ctk.CTkFrame(card, fg_color="transparent", corner_radius=0)
-        content.grid(row=1, column=1, sticky="nsew", padx=(0, 14), pady=(0, 14))
+        # sticky="ew"（不含上下）→ 内容块在卡片下半区垂直居中，数值框居中显示
+        content.grid(row=1, column=1, sticky="ew", padx=(0, 14), pady=(0, 12))
         content.grid_columnconfigure(0, weight=1)
-        content.grid_rowconfigure(0, weight=1)
-        content.grid_rowconfigure(1, weight=1)
+        content.grid_rowconfigure(0, weight=0)
+        content.grid_rowconfigure(1, weight=0)
 
         ctk.CTkLabel(
             content,
@@ -1036,53 +1034,71 @@ class HomePage(ctk.CTkFrame):
             else:
                 card.set_state("未开始", COLORS["muted"], COLORS["panel_soft"])
 
-    def _refresh_alchemy_panel(self, loader_ok, cleaner_ok, mapped_df):
-        """数据炼金炉面板：保留率看行数（无需映射），缺失/取消/非商品看标准列（需映射）。"""
+    def _refresh_alchemy_panel(self, loader_ok, cleaner_ok, _mapped_df):
+        """数据炼金炉面板：保留率与表格形状变化，均不依赖具体字段名。"""
         raw_df = self.app.loader.df if loader_ok else None
         cleaner_df = self.app.cleaner.df if cleaner_ok else None
         raw_rows = len(raw_df) if raw_df is not None else 0
         clean_rows = len(cleaner_df) if cleaner_df is not None else 0
+        raw_cols = len(raw_df.columns) if raw_df is not None else 0
+        clean_cols = len(cleaner_df.columns) if cleaner_df is not None else 0
+        row_change_text = alchemy_row_change_text(raw_rows, clean_rows, cleaner_ok)
+        col_change_text = alchemy_column_change_text(raw_cols, clean_cols, cleaner_ok)
+        metric_values = {
+            "raw_rows": self._fmt_number(raw_rows) if raw_df is not None else "--",
+            "clean_rows": self._fmt_number(clean_rows) if cleaner_ok else "待清洗",
+            "row_change": row_change_text,
+            "col_change": col_change_text,
+        }
 
         if raw_rows == 0:
             self.alchemy_summary_var.set("等待导入数据")
             self.alchemy_gauge_value = 0
             self.alchemy_gauge_text = "--"
             self.alchemy_gauge_note_var.set("等待可分析数据")
-            stats = {"missing": ("--", 0), "cancel": ("--", 0), "non_product": ("--", 0)}
         elif not cleaner_ok:
             self.alchemy_summary_var.set(f"等待清洗  原始 {raw_rows:,} 行")
             self.alchemy_gauge_value = 0
             self.alchemy_gauge_text = "--"
             self.alchemy_gauge_note_var.set("清洗后显示当前可分析数据")
-            stats = {"missing": ("待清洗", 0), "cancel": ("待清洗", 0), "non_product": ("待清洗", 0)}
         else:
-            # 保留率：清洗后行数 / 原始行数（不依赖列名）
+            # 保留率：清洗后行数 / 原始行数（不依赖列名，任何数据集都适用）
             retention = clean_rows / raw_rows if raw_rows else 0
-            self.alchemy_summary_var.set(f"清洗完成  原始 {raw_rows:,} 行 -> 当前 {clean_rows or raw_rows:,} 行")
+            self.alchemy_summary_var.set(f"清洗完成  原始 {raw_rows:,} 行 -> 当前 {clean_rows:,} 行")
             self.alchemy_gauge_value = retention
             self.alchemy_gauge_text = f"{retention * 100:.1f}%"
             self.alchemy_gauge_note_var.set(f"当前可分析数据 {clean_rows:,} 行")
 
-            # 缺失客户 / 取消订单 / 非商品代码：需要标准列名，故用「映射后的原始数据」统计。
-            # 未映射时这三项显示「待映射」（进入分析做完字段映射后即点亮）。
-            if mapped_df is not None and raw_df is not None:
-                from data_handlers.field_mapping import apply_field_mapping
-                raw_mapped = apply_field_mapping(raw_df, self.app.field_mapping)
-                missing = self._missing_customer_count(raw_mapped)
-                cancel = self._cancel_order_count(raw_mapped)
-                non_product = self._non_product_count(raw_mapped)
-                stats = {
-                    "missing": (self._fmt_number(missing), self._ratio(missing, raw_rows)),
-                    "cancel": (self._fmt_number(cancel), self._ratio(cancel, raw_rows)),
-                    "non_product": (self._fmt_number(non_product), self._ratio(non_product, raw_rows)),
-                }
-            else:
-                stats = {"missing": ("待映射", 0), "cancel": ("待映射", 0), "non_product": ("待映射", 0)}
-
-        for key, (text, value) in stats.items():
-            self.alchemy_value_vars[key].set(text)
-            self.alchemy_bars[key].set(max(0, min(1, value)))
+        for key, text in metric_values.items():
+            if key in self.alchemy_value_vars:
+                self.alchemy_value_vars[key].set(text)
+                self._fit_alchemy_value(key)
         self._draw_alchemy_gauge()
+
+    def _fit_alchemy_value(self, key):
+        """按色块当前宽度自适应数值字号，避免大数字(如「减少 154,361」)被裁切。"""
+        label = self.alchemy_value_labels.get(key)
+        if label is None:
+            return
+        width = label.winfo_width()
+        if width <= 1:
+            return  # 尚未完成布局，待 <Configure> 再算
+        text = self.alchemy_value_vars[key].get()
+        # CTk 会把传入字号乘以控件缩放再渲染，故按 scaled 字号量文本宽度，才与 winfo_width 同口径
+        try:
+            scaling = ctk.ScalingTracker.get_widget_scaling(label)
+        except Exception:
+            scaling = 1.0
+
+        def measure(t, s):
+            f = tkfont.Font(family="Microsoft YaHei UI", size=max(1, int(round(s * scaling))), weight="bold")
+            return f.measure(t)
+
+        size = fit_font_size(text, max(width - 16, 1), measure)
+        # 仅在字号变化时重设，避免无谓重绘与 <Configure> 抖动
+        if self._alchemy_value_sizes.get(key) != size:
+            self._alchemy_value_sizes[key] = size
+            label.configure(font=("Microsoft YaHei UI", size, "bold"))
 
     def _draw_alchemy_gauge(self):
         if self.alchemy_gauge_canvas is None:
@@ -1125,19 +1141,23 @@ class HomePage(ctk.CTkFrame):
             )
 
         text_color = COLORS["green"] if value > 0 else COLORS["muted"]
+        value_font_size = alchemy_gauge_font_size(self.alchemy_gauge_text, size)
+        label_font_size = max(9, min(11, int(size * 0.06)))
+        value_y = cy - max(8, size * 0.055)
+        label_y = cy + max(18, size * 0.11)
         canvas.create_text(
             cx,
-            cy - 10,
+            value_y,
             text=self.alchemy_gauge_text,
             fill=text_color,
-            font=("Microsoft YaHei UI", 25, "bold"),
+            font=("Microsoft YaHei UI", value_font_size, "bold"),
         )
         canvas.create_text(
             cx,
-            cy + 20,
+            label_y,
             text="保留率",
             fill=COLORS["muted"],
-            font=("SimHei", 11, "bold"),
+            font=("SimHei", label_font_size, "bold"),
         )
 
     def _refresh_star_panel(self, rfm_ok):
@@ -1320,23 +1340,6 @@ class HomePage(ctk.CTkFrame):
             font=("SimHei", 11),
         )
 
-    def _missing_customer_count(self, df):
-        if "CustomerID" not in df.columns:
-            return 0
-        return int(df["CustomerID"].isna().sum())
-
-    def _cancel_order_count(self, df):
-        if "InvoiceNo" not in df.columns:
-            return 0
-        return int(df["InvoiceNo"].astype(str).str.startswith("C", na=False).sum())
-
-    def _non_product_count(self, df):
-        if "StockCode" not in df.columns:
-            return 0
-        stock = df["StockCode"].astype(str).str.strip()
-        product_mask = stock.str.match(r"^\d{5}[A-Za-z]?$", na=False)
-        return int((~product_mask).sum())
-
     def _customer_count(self, rfm_ok, mapped_df):
         if rfm_ok:
             return len(self.app.rfm_df)
@@ -1346,7 +1349,12 @@ class HomePage(ctk.CTkFrame):
 
     def _total_sales(self, mapped_df):
         if mapped_df is not None and "TotalPrice" in mapped_df.columns:
-            return float(mapped_df["TotalPrice"].sum())
+            # TotalPrice 可能是尚未转数值的文本（用户还没在清洗页转），coerce 防止主页刷新崩
+            try:
+                import pandas as pd
+                return float(pd.to_numeric(mapped_df["TotalPrice"], errors="coerce").sum())
+            except Exception:
+                return None
         return None
 
     def _kpi_state_color(self, done=False, active=False, money=False):
@@ -1380,11 +1388,6 @@ class HomePage(ctk.CTkFrame):
         if value >= 1_000:
             return f"£{value / 1_000:.1f}K"
         return f"£{value:.0f}"
-
-    def _ratio(self, value, total):
-        if not total:
-            return 0
-        return max(0, min(1, value / total))
 
     def _go_next_step(self):
         """跳转到当前页配置的下一步页面。"""

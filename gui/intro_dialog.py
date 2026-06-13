@@ -2,7 +2,7 @@
 
 与其它弹窗的区别：
 - mapping_dialog 是「让用户选列」的操作窗；
-- analyze_dialog 是「生成给 AI 的提示词」；
+- analyze_dialog 是「截当前页快照 + 选模型提交 AI 解读」；
 - 本窗只做**讲解**：一段只读说明文本 + 一个「知道了，开始」按钮，
   关闭后通过 on_close 回调把控制权交还调用方（如接着弹字段映射）。
 
@@ -11,7 +11,7 @@
 
 import customtkinter as ctk
 
-from gui.widgets import BORDER_WIDTH, UI_COLORS as COLORS
+from gui.widgets import BORDER_WIDTH, UI_COLORS as COLORS, apply_hanging_indent
 
 
 class IntroDialog(ctk.CTkToplevel):
@@ -23,13 +23,21 @@ class IntroDialog(ctk.CTkToplevel):
         body:      说明正文（多行字符串，只读展示）
         on_close:  关闭（点「知道了」或 X）后的回调，签名 on_close()，可选
                    ——常用于「讲完接着弹字段映射」。
+        button_text: 底部确认按钮文字，默认「知道了，开始」。
+        secondary_text: 可选的次按钮文字；填了就在主按钮左侧多一个次按钮，
+                        点它走 on_secondary（用于「二选一」式的引导窗）。
+        on_secondary:   次按钮回调，签名 on_secondary()。
     """
 
-    def __init__(self, master, title, body, on_close=None):
+    def __init__(self, master, title, body, on_close=None, button_text="知道了，开始",
+                 secondary_text=None, on_secondary=None):
         super().__init__(master)
         self.on_close_cb = on_close
+        self.button_text = button_text
+        self.secondary_text = secondary_text
+        self.on_secondary_cb = on_secondary
         self.title(title)
-        self.geometry("600x600")
+        self.geometry("600x620")
         self.configure(fg_color=COLORS["page_bg"])
 
         self._build(title, body)
@@ -53,10 +61,18 @@ class IntroDialog(ctk.CTkToplevel):
         action = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
         action.pack(side="bottom", fill="x", padx=22, pady=(4, 16))
         ctk.CTkButton(
-            action, text="知道了，开始", command=self._close,
+            action, text=self.button_text, command=self._close,
             fg_color=COLORS["blue"], hover_color=COLORS["blue_hover"],
             font=("SimHei", 13, "bold"), height=38, width=150, corner_radius=6,
         ).pack(side="right")
+
+        if self.secondary_text:
+            ctk.CTkButton(
+                action, text=self.secondary_text, command=self._close_secondary,
+                fg_color="transparent", hover_color=COLORS["page_bg"],
+                text_color=COLORS["muted"], border_color=COLORS["border"], border_width=1,
+                font=("SimHei", 13), height=38, width=150, corner_radius=6,
+            ).pack(side="right", padx=(0, 10))
 
         box = ctk.CTkTextbox(
             self, font=("SimHei", 13), fg_color="#ffffff", text_color=COLORS["text"],
@@ -65,6 +81,7 @@ class IntroDialog(ctk.CTkToplevel):
         )
         box.pack(side="top", fill="both", expand=True, padx=22, pady=(0, 10))
         box.insert("1.0", body)
+        apply_hanging_indent(box)
         box.configure(state="disabled")  # 只读
 
     def _close(self):
@@ -72,3 +89,9 @@ class IntroDialog(ctk.CTkToplevel):
         self.destroy()
         if self.on_close_cb is not None:
             self.on_close_cb()
+
+    def _close_secondary(self):
+        self.grab_release()
+        self.destroy()
+        if self.on_secondary_cb is not None:
+            self.on_secondary_cb()
