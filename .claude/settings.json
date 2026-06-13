@@ -10,7 +10,11 @@
       "Bash(python -m py_compile gui/window.py gui/mapping_dialog.py gui/filter_bar.py gui/widgets.py gui/pages/base_page.py gui/pages/cleaner_page.py gui/pages/load_page.py gui/pages/home_page.py gui/pages/rfm_page.py gui/pages/sales_page.py gui/pages/product_page.py gui/pages/overview_page.py data_handlers/field_mapping.py)",
       "Bash(python -c ' *)",
       "Bash(python -m py_compile gui/filter_bar.py)",
-      "Bash(python -m py_compile gui/mapping_dialog.py data_handlers/field_mapping.py)"
+      "Bash(python -m py_compile gui/mapping_dialog.py data_handlers/field_mapping.py)",
+      "Bash(grep -n -oE '图[0-9]：[^<]{0,30}' report/_unpacked/word/document.xml)",
+      "Bash(timeout 180 python \"C:/Users/LU/.claude/skills/docx/scripts/office/soffice.py\" --headless --convert-to pdf --outdir report/ \"report/技术报告_正式排版版_cleaning_focus_terms_refined.docx\")",
+      "Bash(python \"C:/Users/LU/.claude/skills/docx/scripts/office/pack.py\" \"report/_unpacked/\" \"report/技术报告_正式排版版_cleaning_focus_terms_refined.docx\" --validate false)",
+      "Bash(python C:/Users/LU/.claude/skills/docx/scripts/office/unpack.py \"report/技术报告_正式排版版_cleaning_focus_terms_refined.docx\" report/_unpacked)"
     ],
     "additionalDirectories": [
       "d:\\期末项目"
