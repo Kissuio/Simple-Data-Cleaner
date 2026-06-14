@@ -287,6 +287,7 @@ class GuidedTour(ctk.CTkToplevel):
         self.index = 0
         self._raw_cols = set()  # 载入时记录原始列名，供「派生新列」检验用
         self._bold_font = None  # 正文 **加粗** 用的派生粗体字体，首次渲染时按实际字号建一次
+        self._status_token = 0  # 每次更新状态自增，用于让过期的失败闪烁自行停止
 
         self.title("新手带练")
         self.geometry("600x620")
@@ -352,8 +353,9 @@ class GuidedTour(ctk.CTkToplevel):
         self.status_label = ctk.CTkLabel(
             self, textvariable=self.status_var, font=("SimHei", 11),
             text_color=COLORS["green"], anchor="w", justify="left", wraplength=550,
+            fg_color="transparent", corner_radius=6,
         )
-        self.status_label.pack(side="bottom", fill="x", padx=20, pady=(0, 6))
+        self.status_label.pack(side="bottom", fill="x", padx=20, pady=(0, 6), ipady=4)
 
         self.body_box = ctk.CTkTextbox(
             self, font=("SimHei", 13), fg_color="#ffffff", text_color=COLORS["text"],
@@ -433,7 +435,33 @@ class GuidedTour(ctk.CTkToplevel):
 
     def _set_status(self, text, ok=True):
         self.status_var.set(text)
-        self.status_label.configure(text_color=COLORS["green"] if ok else COLORS["red"])
+        self._status_token += 1
+        if ok:
+            self.status_label.configure(text_color=COLORS["green"], fg_color="transparent")
+            return
+        # 失败：红底横幅 + 响铃 + 短暂闪烁，避免新手只看到一行不起眼的红字而漏掉
+        self.status_label.configure(text_color=COLORS["red"], fg_color=COLORS["red_soft"])
+        try:
+            self.bell()
+        except Exception:
+            pass
+        self._flash_status(self._status_token, 0)
+
+    def _flash_status(self, token, step):
+        """红底横幅闪烁几下抓注意力；token 过期(已切到新状态)则停止，避免残留。"""
+        if token != self._status_token:
+            return
+        frames = [COLORS["red"], COLORS["red_soft"], COLORS["red"], COLORS["red_soft"]]
+        if step >= len(frames):
+            self.status_label.configure(fg_color=COLORS["red_soft"], text_color=COLORS["red"])
+            return
+        color = frames[step]
+        strong = color != COLORS["red_soft"]
+        self.status_label.configure(
+            fg_color=color,
+            text_color="#ffffff" if strong else COLORS["red"],
+        )
+        self.after(130, lambda: self._flash_status(token, step + 1))
 
     def _data_status_line(self):
         app = self.app
@@ -528,12 +556,11 @@ class GuidedTour(ctk.CTkToplevel):
         return f"已载入京东示例数据：{len(loader.df):,} 行 × {len(loader.df.columns)} 列。"
 
     def _assist_goto_mapping(self):
-        # 前往 RFM 页：若已清洗未映射，show_page 会自动弹出真实的字段映射窗
+        # 前往 RFM 页：show_page 进入分析页且未映射时已会自动弹出字段映射窗，
+        # 这里不能再调一次 open_field_mapping，否则会弹两次（已映射则无需再弹）。
         self.app.show_page("RFM 分析")
-        if not self.app.is_mapped():
-            self.app.open_field_mapping()
         self.lift()
-        return "已打开字段映射窗，请对着样例值核对各列后点确认。"
+        return "已打开字段映射窗，请对照样例值核对各列后点击确认。"
 
     # ───────────────────────── 各步骤检验(看真实数据结果)─────────────────────────
     def _cleaner_df(self):
